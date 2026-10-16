@@ -1,0 +1,6 @@
+-- Historical migration marker for hosted Supabase version 20261016183124.
+-- The initial hosted database was seeded through the Supabase MCP migration workflow.
+-- Canonical repeatable synthetic data is now maintained in ../seed.sql and loaded by
+-- the Supabase CLI after migrations during a local `supabase db reset`.
+-- Keep this timestamp/name aligned with the hosted schema_migrations history.
+-- This marker intentionally contains no DDL/DML: fresh local setup uses seed.sql.
