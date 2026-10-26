@@ -23,6 +23,10 @@ This folder defines how work is divided between the four project contributors. T
 - [Review and Submission Policy](REVIEW_AND_SUBMISSION_POLICY.md)
 - [Team Onboarding Checklist](TEAM_ONBOARDING_CHECKLIST.md)
 
+## Active task submissions
+
+- [M0.2 — Requirements Traceability Submission (Owner: Shashidhar, Reviewer: Ujwal)](M0_2_SUBMISSION.md)
+
 ## Project-specific safety gate
 
 The supplied archive contains database foundations and docs but no visible application `package.json`, frontend route/component tree, API/service modules or application test runner. The repository may be incomplete or the app may be elsewhere. Confirm the intended source branch before implementation. Preserve the baseline and retained database. M0.4 is read-only; no reset, reseed, migration or data/schema write without a separately reviewed approval.
