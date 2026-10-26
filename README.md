@@ -48,6 +48,7 @@ This is a requirements/engineering documentation pack, not a claim that the appl
 
 ## Key files
 - [PRD](PRD.md)
+- [Team roles & delivery responsibilities](TEAM_ROLES.md)
 - [Architecture](ARCHITECTURE.md)
 - [Database & Supabase](DATABASE.md)
 - [Setup](SETUP.md)

@@ -14,6 +14,7 @@ This documentation pack is derived from signed BRD v1.4 and SRS v1.4, approved 2
 - [File structure](../FILE_STRUCTURE.md) — proposed folder/module map; not a verified current tree.
 - [Scope](../SCOPE.md) — in/out of scope and acceptance boundaries.
 - [User rules](../USER_RULES.md) — roles, invariants and workflows.
+- [Team roles](../TEAM_ROLES.md) — delivery ownership, team members and task matrix.
 - [Contributing](../CONTRIBUTING.md) — branch/PR/review process.
 
 ## Feature documentation
@@ -45,6 +46,14 @@ This documentation pack is derived from signed BRD v1.4 and SRS v1.4, approved 2
 - [Deployment and operations boundary](../DEPLOYMENT_AND_OPERATIONS.md)
 - [Handover checklist](../HANDOVER.md)
 - [Glossary](../GLOSSARY.md)
+
+## Team and delivery
+- [Team roles and ownership](../TEAM_ROLES.md)
+- [Team documentation index](team/README.md)
+- [Task ownership matrix](team/TASK_OWNERSHIP_MATRIX.md)
+- [Workflow and handoffs](team/WORKFLOW_AND_HANDOFFS.md)
+- [Review and submission policy](team/REVIEW_AND_SUBMISSION_POLICY.md)
+- [Team onboarding checklist](team/TEAM_ONBOARDING_CHECKLIST.md)
 
 ## Canonical requirements
 - [`requirements/School_Admission_Portal_BRD_v1.4.md`](requirements/School_Admission_Portal_BRD_v1.4.md)

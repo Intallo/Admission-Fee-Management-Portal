@@ -1,0 +1,73 @@
+{
+  "package": "School Admission & Fee Management Portal — Team Roles Documentation Overlay",
+  "version": "1.0",
+  "generated": "2026-10-26",
+  "files": [
+    {
+      "path": "TEAM_ROLES.md",
+      "bytes": 8240,
+      "sha256": "9d923c0b00cd8624c2b3cce1d852b1109f5f5a2fa3a51010cdb282b5709a431f",
+      "lines": 84
+    },
+    {
+      "path": "TEAM_ROLE_DOCS_README.md",
+      "bytes": 1973,
+      "sha256": "3668bb9465c2033622ffda6d91dd2688e4837490a5c1a984708bf343fafc6dc5",
+      "lines": 28
+    },
+    {
+      "path": "docs/team/JEEVAN_FEES_LEDGER.md",
+      "bytes": 5234,
+      "sha256": "d856f1e69dedf489b0920013b55dfa2b6f239c8f0a9fdf0ae457d0e3388342bc",
+      "lines": 60
+    },
+    {
+      "path": "docs/team/README.md",
+      "bytes": 1581,
+      "sha256": "e03502b8f2d0f0a2c939cedf359b56737dc9a5a6e2332aecf926d22da7b8b69a",
+      "lines": 28
+    },
+    {
+      "path": "docs/team/REVIEW_AND_SUBMISSION_POLICY.md",
+      "bytes": 3025,
+      "sha256": "19fc1d1addca0016a0a69cc07b122684d76f628cb1e766b63598998a20272047",
+      "lines": 48
+    },
+    {
+      "path": "docs/team/SHASHIDHAR_PROJECT_LEAD.md",
+      "bytes": 3942,
+      "sha256": "b4184596a4c56b5ea3457af2c1f6a06ba7b7a60050d75475603f337509d6fc51",
+      "lines": 55
+    },
+    {
+      "path": "docs/team/SUJAL_FRONTEND_UX_QUALITY.md",
+      "bytes": 4369,
+      "sha256": "55c26adb5b5fd3729d6c343661a6db2c1c9612b9b174f2cabb98e3715cea9db6",
+      "lines": 58
+    },
+    {
+      "path": "docs/team/TASK_OWNERSHIP_MATRIX.md",
+      "bytes": 6829,
+      "sha256": "afa6ecf8d1dd62256ab9421f39fdaef2dd7203733875fa27d393a23e1500dabb",
+      "lines": 71
+    },
+    {
+      "path": "docs/team/TEAM_ONBOARDING_CHECKLIST.md",
+      "bytes": 2792,
+      "sha256": "c3cae299c7cbdf9cbc6af254bf746d1c585112fe15176b98409cd8f655f060fd",
+      "lines": 41
+    },
+    {
+      "path": "docs/team/UJWAL_ADMISSIONS_STUDENT_RECORDS.md",
+      "bytes": 4411,
+      "sha256": "a836584026868bb320fd1c4509eeec0f8fa80cd6dc41d883a522469a554988f7",
+      "lines": 57
+    },
+    {
+      "path": "docs/team/WORKFLOW_AND_HANDOFFS.md",
+      "bytes": 3888,
+      "sha256": "73a51ce3f7889fea59c718d8319b103c8d3cb72b669e82f0928959fff3a6422e",
+      "lines": 63
+    }
+  ]
+}
