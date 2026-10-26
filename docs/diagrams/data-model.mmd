@@ -1,0 +1,18 @@
+erDiagram
+  ACADEMIC_YEAR ||--o{ APPLICATION : contains
+  ACADEMIC_YEAR ||--o{ STUDENT_FEE : scopes
+  ACADEMIC_YEAR ||--o{ FEE_STRUCTURE : configures
+  STUDENT ||--o{ APPLICATION : relates_to
+  STUDENT ||--o{ STUDENT_FEE : incurs
+  APPLICATION ||--o{ APPLICATION_STATUS_HISTORY : records
+  STUDENT ||--o{ DOCUMENT : has
+  STUDENT_FEE ||--o{ STUDENT_FEE_ITEM : contains
+  FEE_STRUCTURE ||--o{ FEE_STRUCTURE_ITEM : defines
+  FEE_HEAD ||--o{ STUDENT_FEE_ITEM : prices
+  FEE_CATEGORY ||--o{ FEE_HEAD : groups
+  STUDENT_FEE ||--o{ PAYMENT : receives
+  PAYMENT ||--|{ PAYMENT_LINE : contains
+  PAYMENT ||--o{ RECEIPT : evidenced_by
+  RECEIPT ||--o{ FINAL_RECEIPT_ITEM : included_in
+  STUDENT ||--o{ CERTIFICATE : has_yearly
+  USER ||--o{ AUDIT_LOG : performs

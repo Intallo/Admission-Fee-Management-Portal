@@ -1,0 +1,11 @@
+flowchart TD
+  A[Create annual certificate record] --> B[Admission Officer review]
+  B --> C{Forward or return}
+  C -- Return --> D[Record remarks and preserve history]
+  C -- Forward --> E[Principal review]
+  E --> F{Approve or reject}
+  F -- Reject --> G[Record reason/history]
+  F -- Approve --> H[Generate server PDF from stored data and approved template]
+  H --> I[Issue snapshot and unique TC number]
+  I --> J[Retrieve/reprint later; log duplicate]
+  I -. no automatic status change .-> K[Student remains current status unless separately marked Left/Transferred]

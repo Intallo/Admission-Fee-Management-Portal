@@ -1,0 +1,14 @@
+flowchart TD
+  A[Admission Officer creates draft] --> B[Enter student and parent fields]
+  B --> C[Attach documents and review checklist]
+  C --> D{Completeness passes?}
+  D -- No --> E[Show missing fields/docs; save draft or approved override path]
+  E --> B
+  D -- Yes --> F[Submit for Principal review]
+  F --> G{Principal decision}
+  G -- On Hold --> H[Reason and status history]
+  H --> F
+  G -- Reject --> I[Reason and retained history]
+  G -- Approve --> J[Seat limit check and placement]
+  J --> K[Admission number + Admitted status; fee generation if structure exists]
+  K --> L[No payment required for admission]

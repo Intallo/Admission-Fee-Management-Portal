@@ -1,0 +1,17 @@
+flowchart TD
+  UI[Feature-based browser UI] --> API[Single approved server/API boundary]
+  API --> AUTH[Identity and authorization]
+  API --> ADM[Admissions and student records]
+  API --> YEAR[School settings and academic years]
+  API --> FEE[Fee configuration and ledger]
+  API --> DOC[Private document access]
+  FEE --> REC[Receipt eligibility and server-side PDF]
+  ADM --> TC[Annual LC/TC workflow]
+  REC --> AUD[Audit and reporting]
+  TC --> AUD
+  ADM --> DB[Existing approved persistence layer]
+  YEAR --> DB
+  AUTH --> DB
+  FEE --> DB
+  DOC --> STORE[Approved private file storage]
+  NOTE[Proposed only; validate against repository and approve ADR before changes]

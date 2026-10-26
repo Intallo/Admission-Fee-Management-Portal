@@ -29,3 +29,9 @@ desktop.ini
 npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
+
+# Local Supabase studio snippets
+supabase/snippets/
+
+# Archive files
+*.zip

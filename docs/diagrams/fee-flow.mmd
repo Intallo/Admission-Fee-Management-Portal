@@ -1,0 +1,13 @@
+flowchart TD
+  A[Approved yearly fee structure] --> B[Generate student fee after admission approval]
+  B --> C[Accounts Officer selects year, student and receipt type]
+  C --> D[Enter offline payment by fee head]
+  D --> E[Server validates role, year, receipt type, amount and date]
+  E --> F{Rules pass?}
+  F -- No --> G[Reject clearly; no partial write]
+  F -- Yes --> H[Atomic ledger + payment lines + sequence + receipt]
+  H --> I[Recalculate head and student balances]
+  I --> J{All applicable fees fully paid?}
+  J -- No --> K[Payment receipt; final fees receipt unavailable]
+  J -- Yes --> L[Final fees receipt may be issued once]
+  I --> M[Statement printable at any time]

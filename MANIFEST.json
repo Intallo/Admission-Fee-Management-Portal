@@ -1,0 +1,496 @@
+{
+  "generated_date": "2026-10-26",
+  "baseline": "Signed BRD v1.4 and SRS v1.4; approved 2026-10-22",
+  "active_feature_stories": 43,
+  "withdrawn_story": "US-43",
+  "architecture_status": "Proposed; pending actual repository audit and ADR approval",
+  "database_guardrail": "Preserve baseline 5e1c47e and retained database; M0.4 read-only",
+  "file_count_excluding_manifest_and_index": 97,
+  "files": [
+    {
+      "path": ".github/ISSUE_TEMPLATE/bug-report.md",
+      "bytes": 547,
+      "sha256": "35a16b42201a980959e447e653b404acbe6928743973d6afdac0cbf058f98bfb"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/requirement-change.md",
+      "bytes": 547,
+      "sha256": "21ef9b810e47eeb87d4a9e8dfee1ee52791225381ccacf5e5272523833364d50"
+    },
+    {
+      "path": ".github/PULL_REQUEST_TEMPLATE.md",
+      "bytes": 850,
+      "sha256": "8e819334cbde232d9b832028bb50b71358207b5dd154120d27e7dccbdb8eb06a"
+    },
+    {
+      "path": "ACCEPTANCE_TESTS.md",
+      "bytes": 3356,
+      "sha256": "cc819df88f99182fe17b1cc61f6d937d5352820ac1bbd2a326b1002903825c57"
+    },
+    {
+      "path": "API_SPEC.md",
+      "bytes": 3644,
+      "sha256": "0ffff05aee070d1845c45dfca0a265d748bab368c413c0467f8f1f7a0fdaf838"
+    },
+    {
+      "path": "ARCHITECTURE.md",
+      "bytes": 4663,
+      "sha256": "40a9303bc42cfe89f78f2c748c76edfb94a781c36ce726acd06d22b2774932d3"
+    },
+    {
+      "path": "AUDIT_LOGGING.md",
+      "bytes": 1663,
+      "sha256": "dac97de81f976a5b0c0fc21abba7ef8397f12d96b6715698375139c944916282"
+    },
+    {
+      "path": "AUTHORIZATION_MATRIX.md",
+      "bytes": 2020,
+      "sha256": "adba4049a05d3dcf193a7fdf60676c8cfff68181132af8e9748a8d5d029a03eb"
+    },
+    {
+      "path": "CHANGE_MANAGEMENT.md",
+      "bytes": 1267,
+      "sha256": "b97aa169934c12d769e5db01fe7b0f6f1070c4ebbc53061fd8bc4b889565df5c"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "bytes": 1803,
+      "sha256": "b6fe427995eb86b5cb6cbad2f17ffa2812a86edbe29a15160edcc598c64d35fe"
+    },
+    {
+      "path": "DATA_DICTIONARY.md",
+      "bytes": 3639,
+      "sha256": "d2e91a191dd3b3a38a37426373e3f5e0dd9b6327303c798848e2ae457ddc1a43"
+    },
+    {
+      "path": "DATA_MODEL.md",
+      "bytes": 3790,
+      "sha256": "bdeff6525d7f3b8d37610b1008b820bff238edbcd6d0f5e71b11588e86a7876e"
+    },
+    {
+      "path": "DECISIONS.md",
+      "bytes": 1775,
+      "sha256": "7ee9a9845d82a9cdd1651a0acc082d6e2fcc7e8291dfce253c3b925ad39c5728"
+    },
+    {
+      "path": "DEPLOYMENT_AND_OPERATIONS.md",
+      "bytes": 1213,
+      "sha256": "072ceed3d3ba9748204fe7416734299a1dee1053448b5bae3cd84c36c4c94be1"
+    },
+    {
+      "path": "DESIGN_SYSTEM.md",
+      "bytes": 2630,
+      "sha256": "35a831629a9241da7415d0b27c54cab9ba5ccb8f11cf7a6e5a47e7c95097334e"
+    },
+    {
+      "path": "DOCUMENT_MANAGEMENT.md",
+      "bytes": 1908,
+      "sha256": "d801b683e29483809e14b16b2d3971be59a4b3f9ec4d91883d5fb409b1263e8b"
+    },
+    {
+      "path": "ENVIRONMENT_VARIABLES.md",
+      "bytes": 872,
+      "sha256": "e0c5441f173244ce05016b0e17540d6726eab180d66547a1ea511a50d02a79ca"
+    },
+    {
+      "path": "ERROR_HANDLING.md",
+      "bytes": 1287,
+      "sha256": "5ae35e526d43f607d29d055731b6a5a1c96c2766c47e334c3ca8f231ae6004f9"
+    },
+    {
+      "path": "FILE_STRUCTURE.md",
+      "bytes": 2873,
+      "sha256": "a504cb231584efab7d632c55f06376aa1492c7c2e4d1df1798f1a1956d3baa15"
+    },
+    {
+      "path": "FUNCTIONAL_REQUIREMENTS.md",
+      "bytes": 2925,
+      "sha256": "bbbc747c6a572fdeb8b3b3df87045606ae8eebe4694e668b44281e2ebe6227ee"
+    },
+    {
+      "path": "GLOSSARY.md",
+      "bytes": 1914,
+      "sha256": "50093cc5fd96652f4a3d5d1f72f43c3ea0f4ca98a71ccb9feeeb9991f5de8343"
+    },
+    {
+      "path": "HANDOVER.md",
+      "bytes": 1901,
+      "sha256": "215e55472300517bea0a0b568371d76e3f2ec3fa3996e20e5d40eae0b7d5e597"
+    },
+    {
+      "path": "NON_FUNCTIONAL_REQUIREMENTS.md",
+      "bytes": 1870,
+      "sha256": "df3ab65cf9be4e2ecca6021f442d44009310cb5c9d847ee7a1056a71e7a841c9"
+    },
+    {
+      "path": "NUMBERING_AND_FINANCIAL_RULES.md",
+      "bytes": 1843,
+      "sha256": "a2778874ac1aed1fb18cc31ef656bd0a72c8b117ac78aa5f85d452ef157b9b9e"
+    },
+    {
+      "path": "OPEN_ITEMS.md",
+      "bytes": 2576,
+      "sha256": "14384620f092fee0b74b6b3336c40a52cd9666f7b254ad02a8805445dccf0493"
+    },
+    {
+      "path": "PERFORMANCE.md",
+      "bytes": 1164,
+      "sha256": "66c6fc9eef017f2f4c4cf63f0048a960ce63904a193115e30fbbcea0a24796f3"
+    },
+    {
+      "path": "PRD.md",
+      "bytes": 5663,
+      "sha256": "01c4391d2365ab8215a4d8fa4aa57186b86fdbb603d36043f553eeb07094268c"
+    },
+    {
+      "path": "QUALITY_GATE.md",
+      "bytes": 1413,
+      "sha256": "b4b3dc1817c9ca7bc52794dcde284f8210e337adb911c06a0f87f852411cab62"
+    },
+    {
+      "path": "README.md",
+      "bytes": 4343,
+      "sha256": "c583f46d5c6fea85393a2e39b14275df7d3208bd58993fba10dbec5d8e4d3eeb"
+    },
+    {
+      "path": "RELEASE_PLAN.md",
+      "bytes": 2226,
+      "sha256": "9a11d70ad9161098a16bd70e06ddc9b9c663c9d46c87f32b0a9dc262f41575f6"
+    },
+    {
+      "path": "SCOPE.md",
+      "bytes": 2473,
+      "sha256": "2b49d06d300ffe1288a0861867bfa37d258ead80c73635486aab9c33a0d10d62"
+    },
+    {
+      "path": "SECURITY_PRIVACY.md",
+      "bytes": 2422,
+      "sha256": "2410ced469a8e5c0d7c383e594bcc47ae2a8bafe6f4c981c2835ea9db081fb7b"
+    },
+    {
+      "path": "SETUP.md",
+      "bytes": 5265,
+      "sha256": "9d58a61e7e25ae1e215de38cf40e96a41d3e6ee4d340b6e8b41988826346c9f1"
+    },
+    {
+      "path": "TEST_PLAN.md",
+      "bytes": 2834,
+      "sha256": "da43ee4c3e9403a0fabf337381438eb97582461343826adea021ab25d45ba432"
+    },
+    {
+      "path": "TRACEABILITY.md",
+      "bytes": 1643,
+      "sha256": "d564976a9c88bfc2cbd398694cad0482beae48a67e5f929c2d89b709bcfded0c"
+    },
+    {
+      "path": "UI_UX.md",
+      "bytes": 4459,
+      "sha256": "d830ad1e72fcd059ee886ad863d5db063b3d567a66fad8845c78a48c2a609fbb"
+    },
+    {
+      "path": "USER_RULES.md",
+      "bytes": 4987,
+      "sha256": "8587db465b1a6b13d93db49e7e8f674f96e35f6438e7dc2df3d8158866684705"
+    },
+    {
+      "path": "WEB_UX.md",
+      "bytes": 3537,
+      "sha256": "8fe3befe17a5763e817c79930a3d45cecf80404ecb7dc3fc2e7226136833f340"
+    },
+    {
+      "path": "docs/FEATURE_COUNT.md",
+      "bytes": 297,
+      "sha256": "0207931242039923c1d157d70555c412ad2e06576bd5debcb5659d39b10db692"
+    },
+    {
+      "path": "docs/README.md",
+      "bytes": 3812,
+      "sha256": "799303c2dba34b6b15c8ffa901e1fa1a2eae618db066e045c43eb351bd5d0f39"
+    },
+    {
+      "path": "docs/adr/ADR-001-modular-monolith.md",
+      "bytes": 2045,
+      "sha256": "5202c0821d01e386dda01f8e239b9e0a7c88762dbe9894b41ddeda1fab0ff903"
+    },
+    {
+      "path": "docs/adr/ADR-TEMPLATE.md",
+      "bytes": 874,
+      "sha256": "7a2a6e87c53c956624e27c80b4500081f83326d39e7f8276e0a5e03743a0a446"
+    },
+    {
+      "path": "docs/diagrams/README.md",
+      "bytes": 305,
+      "sha256": "0846f427901657f1fd8cd79443d0d0fa3bf992e4018099ce32eb4ce95c19fb8a"
+    },
+    {
+      "path": "docs/diagrams/admission-flow.mmd",
+      "bytes": 623,
+      "sha256": "a5107c31b12f99f29b9cd67ff12c7b8d851ca2f345567c0e8152daffbd0827b8"
+    },
+    {
+      "path": "docs/diagrams/architecture.mmd",
+      "bytes": 671,
+      "sha256": "af5074b94277aac5f44d4a29f1bb93480887e317973cfe3c869e68b38c7c2879"
+    },
+    {
+      "path": "docs/diagrams/certificate-flow.mmd",
+      "bytes": 571,
+      "sha256": "68004a72fad6eb0fe9ab38b3b3a4014e54a547e65e6cef6de5fb77fd3a314a89"
+    },
+    {
+      "path": "docs/diagrams/data-model.mmd",
+      "bytes": 753,
+      "sha256": "273f41502ea825d790f1f88216225ee26286dc53f28f51461e99380277f23213"
+    },
+    {
+      "path": "docs/diagrams/fee-flow.mmd",
+      "bytes": 681,
+      "sha256": "29c9c0794ee148300de33bafcd42fd6ab0c5d3024eddbed9c9f8279417010593"
+    },
+    {
+      "path": "docs/features/README.md",
+      "bytes": 5182,
+      "sha256": "75502daa3e716adbe2b59fc87654046bf0796fd65a60608063f07202bed853dd"
+    },
+    {
+      "path": "docs/features/us-01-login.md",
+      "bytes": 1319,
+      "sha256": "78444a3b481923919b3b694b6ffc1cbe094041fdb20f137b0808e96181f46423"
+    },
+    {
+      "path": "docs/features/us-02-role-based-menus.md",
+      "bytes": 1284,
+      "sha256": "5f3c44dc32914372638550bf1a1fccc9a4064b4d13936df427ce28a278b81c20"
+    },
+    {
+      "path": "docs/features/us-03-sensitive-data-protection.md",
+      "bytes": 1538,
+      "sha256": "94899db3a67edea0a2a9a375fcc03b58036d89a915dd5f4fcda5fe3f0755a6f4"
+    },
+    {
+      "path": "docs/features/us-04-account-management.md",
+      "bytes": 1384,
+      "sha256": "0d92fd97ccaba91e4aea7315a87a5a365d19d408578c53d5e84f74551c05c5cb"
+    },
+    {
+      "path": "docs/features/us-05-select-academic-year.md",
+      "bytes": 1210,
+      "sha256": "4a945eeb7d4847b3e852cee84859f474b2143e37d8130687c83aa50bc7dccf29"
+    },
+    {
+      "path": "docs/features/us-06-manage-academic-years.md",
+      "bytes": 1541,
+      "sha256": "9404645c7b3f49eeb0e8bf01e58ddb85c79d57037a24d93c869d555b153e17ee"
+    },
+    {
+      "path": "docs/features/us-07-create-application.md",
+      "bytes": 1556,
+      "sha256": "a83097600c9ecc76dcb30a41c098bf7870e0611e7ff844ea113150527b1858b4"
+    },
+    {
+      "path": "docs/features/us-08-enter-student-details.md",
+      "bytes": 2266,
+      "sha256": "303d52e0f6afc403da6634270b1b268a83629f9a96fd6dd81b38e75ccfaa316e"
+    },
+    {
+      "path": "docs/features/us-09-enter-parent-details.md",
+      "bytes": 1505,
+      "sha256": "dc00778d82f9da2b915c1e1035fb5ab1c96004208bf3ae761511b0dd7f87bce3"
+    },
+    {
+      "path": "docs/features/us-10-upload-documents.md",
+      "bytes": 1761,
+      "sha256": "57aba854b68463356a992299474f2e8e5e471660e8f76f8c0614dbf83db04871"
+    },
+    {
+      "path": "docs/features/us-11-track-missing-documents.md",
+      "bytes": 1509,
+      "sha256": "f4fd99881e1e97684481a38d741d1a090fc0c8f35b863508dd3d6b03e6235075"
+    },
+    {
+      "path": "docs/features/us-12-save-and-edit-draft.md",
+      "bytes": 1214,
+      "sha256": "8274d05bb95f5e9c1c8471a7e47d0c217fe312a71d6e99a8896d6c03ebf340ff"
+    },
+    {
+      "path": "docs/features/us-13-submit-for-verification.md",
+      "bytes": 1259,
+      "sha256": "f272afd045941688bc4263404683474e834ba0f9e126426b325d85d8060508dc"
+    },
+    {
+      "path": "docs/features/us-14-principal-decision.md",
+      "bytes": 1695,
+      "sha256": "5b0958a0398c1f67b404193a866c20ef1ca4c9d943c236897b845ba06b93d6c5"
+    },
+    {
+      "path": "docs/features/us-15-admission-and-fee-generation-on-approval.md",
+      "bytes": 1992,
+      "sha256": "d03dda684464ed02cb4b68dc175d1107c8e258765f6ec7a9500e03ea8f7d496f"
+    },
+    {
+      "path": "docs/features/us-16-application-list-and-status-view.md",
+      "bytes": 1315,
+      "sha256": "734027750970442fd60c59d089ae889b96023856537e9911f4359ad2c67df882"
+    },
+    {
+      "path": "docs/features/us-17-manage-receipt-types-and-fee-heads.md",
+      "bytes": 2007,
+      "sha256": "aec9a2fe0c5de41a7c513031e7c855918f586ce7d386683d76c03763bffc91a3"
+    },
+    {
+      "path": "docs/features/us-18-set-yearly-fee-structure.md",
+      "bytes": 1813,
+      "sha256": "02df1ac0a89381910093a6459a13aaac29cb312ea4889f8895ad1df2705eb382"
+    },
+    {
+      "path": "docs/features/us-19-manage-vehicle-places.md",
+      "bytes": 1604,
+      "sha256": "f0139473df7f0878619b23458e4a20b61d53c85598de9b77e6c6f1c48f951100"
+    },
+    {
+      "path": "docs/features/us-20-view-student-fee-breakdown.md",
+      "bytes": 1738,
+      "sha256": "696bc6352b8135b542cf700a34e443ba3e4da30e80660166f399cae801bd5763"
+    },
+    {
+      "path": "docs/features/us-21-record-a-payment.md",
+      "bytes": 2178,
+      "sha256": "13aecb694a1fd3afd69536e501a6b4e3221cead440e94eb73748d1a765cf9d66"
+    },
+    {
+      "path": "docs/features/us-22-later-payments-on-fee-heads.md",
+      "bytes": 1391,
+      "sha256": "d03b3c68f983671348cde928250f06d68257159d8defc9368140cc71dfd04f01"
+    },
+    {
+      "path": "docs/features/us-23-fee-status-and-balance-display.md",
+      "bytes": 1430,
+      "sha256": "82b324017266d307298e88c598976612d7a4c2199380e17841ee91783adc8bcf"
+    },
+    {
+      "path": "docs/features/us-24-outstanding-dues-list.md",
+      "bytes": 1397,
+      "sha256": "a87a2b5fe961a5ae58c8e26f54d5fe049d23eb0d2c2d7aff2bbc5626469671b5"
+    },
+    {
+      "path": "docs/features/us-25-payment-history.md",
+      "bytes": 1315,
+      "sha256": "8f50d804d5739e603b77748d52801d8bd5ddf0037df1c1543a8a7233a9b238b3"
+    },
+    {
+      "path": "docs/features/us-26-concession-negotiated-fee-or-extra-charge.md",
+      "bytes": 2078,
+      "sha256": "625d50a44878863f9261457e350c1f4afdafec553aadf954019a524e75c8c8ce"
+    },
+    {
+      "path": "docs/features/us-26a-refund-or-payment-correction.md",
+      "bytes": 1682,
+      "sha256": "915c71c7dc0f3401c9226fc573e387897dd6963c7dbe1b6b0b2fcfb877dd7afe"
+    },
+    {
+      "path": "docs/features/us-27-receipt-for-each-receipt-type.md",
+      "bytes": 1886,
+      "sha256": "f9db4f177d3047028ed2cd2a50a7e5907fff0e888a5909131c917b5064d9d53f"
+    },
+    {
+      "path": "docs/features/us-28-final-fees-receipt-and-fee-statement.md",
+      "bytes": 1930,
+      "sha256": "a41bd588b0bc6a468dc1c40e9dd20627c20f1b957b103f96b0a96eb6f27ffff2"
+    },
+    {
+      "path": "docs/features/us-29-reprint-documents.md",
+      "bytes": 1123,
+      "sha256": "f5fb3c2aa267c994ea8657f9d4521493f1f0c9023d1c85779fa58e28e542255d"
+    },
+    {
+      "path": "docs/features/us-30-search-students.md",
+      "bytes": 1284,
+      "sha256": "83f9ad07e9e8cc8ef418806d0a074c663882aee3535bbce7db35fbf53e57fdaa"
+    },
+    {
+      "path": "docs/features/us-31-student-profile.md",
+      "bytes": 1202,
+      "sha256": "4282d5345eaa12109b85df598431fa7434e7d59f4d60985560fd5792857cd795"
+    },
+    {
+      "path": "docs/features/us-32-mark-student-as-left.md",
+      "bytes": 1513,
+      "sha256": "601d7a71b60bc768a09dd36a751876d55fecc2dbf7b7a44d58f9c5f6d82178e4"
+    },
+    {
+      "path": "docs/features/us-33-immutable-records.md",
+      "bytes": 1396,
+      "sha256": "50d37efe330d22115ea685c3e3380deb9d34af04124e4986f911a78af988cfd2"
+    },
+    {
+      "path": "docs/features/us-34-create-the-year-s-certificate-records.md",
+      "bytes": 1764,
+      "sha256": "0590c0f68d403c3cb1eea9ca78ae403a8faed75631a2f5c697be02295695099c"
+    },
+    {
+      "path": "docs/features/us-35-review-and-approve-tc.md",
+      "bytes": 1656,
+      "sha256": "ee63a4575f698f4e9482bed8db590e475b9afb8597528a1dcc6cfb58fe16309d"
+    },
+    {
+      "path": "docs/features/us-36-generate-the-lc-tc.md",
+      "bytes": 1808,
+      "sha256": "f579757c0eb0a4f2752d9f2104fd1a4173214dab6d8e459545c13174963a0a8a"
+    },
+    {
+      "path": "docs/features/us-37-retrieve-and-reprint-lc-tc.md",
+      "bytes": 1422,
+      "sha256": "5677bfdfc0598140aaa16bb44fbf283c812674d051a1d6cc665fee806c7a3e9c"
+    },
+    {
+      "path": "docs/features/us-38-audit-log.md",
+      "bytes": 1339,
+      "sha256": "b31af6ba7557021a1e7559e5c2e7f1eadb00a8cbc2ad06cdf132b742e6ea1f95"
+    },
+    {
+      "path": "docs/features/us-39-basic-dashboard.md",
+      "bytes": 1295,
+      "sha256": "41f745b27372991f28b81232d2cd8eb60105da3bc2f511fb3c1e325af6abab9a"
+    },
+    {
+      "path": "docs/features/us-40-developer-handover-package.md",
+      "bytes": 1943,
+      "sha256": "aaa16626b4cc809ce20787f3531cd5dd3fca1f3ccbe49e5eaf2fad2d283d35c3"
+    },
+    {
+      "path": "docs/features/us-41-demo-data.md",
+      "bytes": 1591,
+      "sha256": "1e8c9e45a0d69bf4b554bc051723542ed7a0b0ff70847d1304f894c95a5ff939"
+    },
+    {
+      "path": "docs/features/us-42-seat-limits.md",
+      "bytes": 1749,
+      "sha256": "a02cf630f4e52743081d800642e197e1f20ad5181fe1e93d8ff18fcb6efe5d55"
+    },
+    {
+      "path": "docs/features/us-43-withdrawn-year-end-fee-closure.md",
+      "bytes": 491,
+      "sha256": "5eb70ad76decf346cd907fc57111ade8d7063bfe19e29f4fb222fd1f308a74bf"
+    },
+    {
+      "path": "docs/requirements/School_Admission_Portal_BRD_v1.4.md",
+      "bytes": 43255,
+      "sha256": "1e41c928b4ec0387590c797b6f917ab013c9153745a7fb5d835cf48add3c5dd1"
+    },
+    {
+      "path": "docs/requirements/School_Admission_Portal_SRS_v1.4.md",
+      "bytes": 55257,
+      "sha256": "e7f523fb662b378ec51932cec193c1e94d60ba361a80af9501669ee92249b21c"
+    },
+    {
+      "path": "docs/templates/database-migration-checklist.md",
+      "bytes": 850,
+      "sha256": "a2ab2aa899a9ea6a309a5c898154a7034f1d4c9ee157e3c35fcae3a44ce1551b"
+    },
+    {
+      "path": "docs/templates/task-submission-template.md",
+      "bytes": 1024,
+      "sha256": "0cb0c1fec639c3d85e03977263994497a5f789fd523a864ef9e93ca61206d12b"
+    }
+  ]
+}

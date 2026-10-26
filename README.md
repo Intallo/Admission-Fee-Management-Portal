@@ -1,95 +1,57 @@
-# Admission & Fee Management Portal â€” Database
+# School Admission & Fee Management Portal
 
-Supabase/PostgreSQL schema, migrations, synthetic demonstration data, and generated TypeScript types for the School Admission & Fee Management Portal.
+A desktop-browser application for ABC English Medium School, delivered by Intallo as source code and a handover package. It digitizes admissions, year-specific student records, offline fee collection, receipts, and annual Leaving/Transfer Certificate (LC/TC) workflows.
 
-## Project safety
+> **Requirements baseline:** Signed BRD v1.4 and SRS v1.4, approved 22 October 2026. Canonical copies are under [`docs/requirements/`](docs/requirements/).
+>
+> **Data-safety guardrail:** Preserve Git baseline `5e1c47e` and the retained database. M0.4 is strictly read-only. No reset, reseed, migration, schema/data write, `DROP`, `TRUNCATE`, or `DELETE` against the retained database without a separately reviewed and explicitly approved task.
+>
+> **Architecture status:** The proposed modular-monolith direction and folder map are hypotheses until repository inspection and M1.1 ADR approval. This pack does not claim any particular framework, ORM, provider, API path or schema already exists.
 
-- Only synthetic demo records are included. Never add real student records or private school documents to seed files, screenshots, or tests.
-- The schema is designed for staff-only application use. RLS is enabled across public tables and **no browser-facing policies are created yet**. Keep it fail-closed until Supabase Auth and the approved staff-role/field-level authorization matrix are implemented.
-- Never put a Supabase `service_role` secret in frontend code, a `NEXT_PUBLIC_*` variable, or Git.
-- Fee and transport values in the seed are illustrative and must be replaced with school-approved values before production.
-- Current open decisions include admission-number uniqueness scope, pre-admission fee-head restriction, seat-hold period, and final client approvals for receipt/certificate/document requirements.
+## Start here
+1. Read [`SCOPE.md`](SCOPE.md) and [`USER_RULES.md`](USER_RULES.md).
+2. Read [`ARCHITECTURE.md`](ARCHITECTURE.md) and [`FILE_STRUCTURE.md`](FILE_STRUCTURE.md), noting that both are proposals pending an audit and ADR.
+3. Read [`SETUP.md`](SETUP.md). Runtime-specific commands must be verified against the real repository; do not run unknown scripts against the retained database.
+4. Use [`docs/README.md`](docs/README.md) as the documentation index.
+5. Use [`docs/features/README.md`](docs/features/README.md) for one Markdown file per signed SRS user story.
 
-## Directory layout
+## In-scope capabilities
+- Login, account lifecycle and server-enforced role/field-level access.
+- Academic-year selection and year-scoped records.
+- Admission forms, document checklists, status history, Principal decisions and seat capacity.
+- Configurable receipt types/fee heads, yearly fee structures and vehicle places.
+- Admission without a payment requirement and a variable Admission Fee.
+- Offline payments by fee head, precise INR balances, append-only ledger and approved adjustments/reversals.
+- Numbered receipts, final fees receipt only after full payment, unnumbered statement available any time, reprint handling.
+- Student search/profile and annual LC/TC workflow.
+- Audit log, basic dashboard, synthetic demo data, test plan and source handover.
 
-```text
-supabase/
-  config.toml
-  migrations/
-    20261016182749_init_admission_fee_management_schema.sql
-    20261016183014_enforce_financial_integrity_and_indexes.sql
-  seed.sql
-src/
-  types/
-    database.types.ts
-.env.example
-.gitignore
-README.md
-```
+Online payments, parent/student portal, SMS/WhatsApp/email notifications, mobile app, attendance, exams, timetable, promotion and automatic fee carry-forward are out of scope.
 
-The database and seed have already been applied to the configured Supabase project by the project owner. These files are the source-controlled baseline for repeatable setup and further development. Always compare migration history with the remote database before applying any migration to a shared project.
+## Non-negotiable rules
+- Admission does not require payment. The Admission Fee is variable; do not force a payment order or minimum first payment.
+- Payments are recorded only; the software does not process money.
+- No hard deletes. Corrections use approved auditable adjustment/reversal flows.
+- Use exact decimal/numeric INR arithmetic, never binary floating point.
+- A final fees receipt is issued only when all applicable fees are fully paid. It includes payer, Cashier and Manager signature lines; Manager means Principal.
+- Annual LC/TC issuance does not itself mark a continuing student Left/Transferred.
+- No automatic fee balance carry-forward between academic years.
+- Sensitive fields/files are restricted server-side. Use fake data in demos/tests; never commit real student records.
 
-## Prerequisites
+## Current status
+This is a requirements/engineering documentation pack, not a claim that the application is implemented or the proposed architecture accepted. Recommended sequence: M0.1 baseline verification → M0.2 requirement traceability → M0.4 read-only schema inventory → M0.5 open decisions → M1.1 architecture ADR.
 
-- Git
-- Supabase CLI compatible with PostgreSQL 17
-- Docker Desktop for a local Supabase stack
-- Node.js only when running the application (the database files themselves are SQL)
+## Responsibilities
+- **Intallo:** source code and handover artifacts under the signed engagement.
+- **Client:** single contracting/approval point; supplies required forms, letterhead, fee amounts, vehicle place tariffs and approved TC format; owns deployment, hosting, live security, database operation, backups, training and ongoing maintenance.
+- **School staff:** intended users of the deployed application; engagement communication routes through the Client.
 
-Verify the CLI using `supabase --version` and discover supported options with `supabase --help`.
-
-## Local setup
-
-1. Copy `.env.example` to the application-specific local environment file and fill in only the required local/public values.
-2. Start local Supabase: `supabase start`.
-3. Apply migrations and load the synthetic demo seed into the **local database only**: `supabase db reset`.
-4. Check current local migration status: `supabase migration list --local`.
-5. Generate TypeScript database definitions when the schema changes (see below).
-
-**Warning:** `supabase db reset` is destructive to the local Supabase database. Confirm that the CLI is linked/running locally and never use reset commands against a shared or production database.
-
-## Remote project
-
-Project reference: `fjrfyzamiirqzitdchkz`
-Project dashboard: https://supabase.com/dashboard/project/fjrfyzamiirqzitdchkz
-
-Before remote migration operations:
-
-1. Authenticate the Supabase CLI and verify the selected project reference.
-2. Run `supabase link --project-ref fjrfyzamiirqzitdchkz` if the local project is not already linked.
-3. Compare local migration files with remote migration history using `supabase migration list`.
-4. Do not reapply the initial migrations blindly; the schema and seed were applied to the hosted project before this repository baseline was created.
-5. Review the SQL and take an appropriate backup before any production change.
-
-## TypeScript database types
-
-The generated file at `src/types/database.types.ts` is derived from the current Supabase schema. Regenerate after schema changes using the version-appropriate command, for example:
-
-```bash
-supabase gen types typescript --project-id fjrfyzamiirqzitdchkz --schema public > src/types/database.types.ts
-```
-
-This command needs an authenticated Supabase CLI session and a reachable project.
-
-## Applying future database changes
-
-- Create migration files with the CLI: `supabase migration new <descriptive_name>`.
-- Review the generated SQL. Avoid mixing data changes with structural migrations unless the backfill must be atomic with the schema change.
-- Test against a clean local database and, where applicable, a database restored from a recent backup.
-- Verify foreign keys, constraints, RLS, grants, and transaction/ledger invariants.
-- Run relevant integration tests and the Supabase security advisors before release.
-- Use the current Supabase CLI documentation for exact commands. Do not use a production reset or casually delete financial history.
-
-## Important schema behavior
-
-- School year: June 1 to May 31.
-- Class mapping: Nursery/LKG/UKG; Standards 1â€“7; Standards 8â€“10.
-- Payment model: offline payments allocated to fee assessment lines in INR.
-- Financial records are intended to be append-only. Correct errors with auditable adjustments/reversals.
-- Each individual receipt is a summary of one recorded payment. A consolidated receipt references existing individual receipts and must never be counted as a new payment.
-- Document files belong in private object storage. PostgreSQL stores only protected metadata/object keys.
-- Seeded demo staff profiles are directory rows, not Supabase Auth users; no passwords or live accounts are created.
-
-## Seed data
-
-`supabase/seed.sql` is designed to be rerunnable using stable synthetic identifiers. It includes demo staff profiles, academic years, grade levels, sections, fictional students/guardians/admission states, fee structures, payment allocations, receipts, adjustments, and sample annual certificates. It does not upload fake files into Storage.
+## Key files
+- [PRD](PRD.md)
+- [Architecture](ARCHITECTURE.md)
+- [Database & Supabase](DATABASE.md)
+- [Setup](SETUP.md)
+- [Features](docs/features/README.md)
+- [Test plan](TEST_PLAN.md)
+- [Traceability](TRACEABILITY.md)
+- [Open client decisions](OPEN_ITEMS.md)
