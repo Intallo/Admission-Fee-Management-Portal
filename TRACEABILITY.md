@@ -5,7 +5,7 @@
 **Independent Reviewer:** Ujwal (Admissions & Student Records Owner)  
 **Authoritative Baselines:** Signed BRD v1.4 and Signed SRS v1.4 (Approved 22 October 2026)  
 **Database Impact:** Read-only (no database writes or schema changes performed)  
-**Status:** In Review  
+**Status:** In Review (Revised per review findings)  
 
 ---
 
@@ -20,11 +20,11 @@ This traceability matrix maps every requirement, role constraint, business invar
 
 ---
 
-## 2. Functional Requirements & User Stories Matrix
+## 2. Functional Requirements & Delivery Stories Matrix
 
-All 47 BRD requirements map to active SRS user stories. Detailed individual acceptance criteria are maintained in [`docs/features/`](docs/features/).
+All 47 BRD requirements (`BR-01..47`) map to active SRS user stories. Project-team delivery stories (`US-04`, `US-39`, `US-40`, `US-41`) defined in SRS §5 Module 10 and §10 are explicitly mapped to their handover, dashboard, and verification tasks. Detailed individual acceptance criteria are maintained in [`docs/features/`](docs/features/).
 
-| BRD ID | SRS Story ID | Requirement Summary | Source Section | Target Module | Milestone | Status |
+| Requirement ID | SRS Story ID | Requirement Summary | Source Section | Target Module | Milestone | Status |
 |---|---|---|---|---|---|---|
 | **BR-01** | US-01, US-04 | User authentication, login failure lockout (5 attempts / 15 min), account deactivation, password reset | BRD §5.1, SRS §5 Mod 1 | `identity-access` | M3.1, M3.2 | Confirmed |
 | **BR-02** | US-05, US-06 | Academic year creation, activation, closure; annual data isolation; no overlapping ranges | BRD §5.2, SRS §5 Mod 2 | `academic-years` | M3.4 | Confirmed |
@@ -48,7 +48,7 @@ All 47 BRD requirements map to active SRS user stories. Detailed individual acce
 | **BR-20** | US-23 | Head-level and student-level fee status derivation (Paid, Partial, Unpaid) | BRD §5.5, SRS §5 Mod 5 | `fees-ledger` | M5.3 | Confirmed |
 | **BR-21** | US-26 | Concession and negotiated fee discount recording (Principal approval required) | BRD §5.6, SRS §5 Mod 6 | `fees-ledger` | M5.4 | Confirmed |
 | **BR-22** | US-26A | Refund and payment correction flow via approved reversal adjustment; no physical delete | BRD §5.6, SRS §5 Mod 6 | `fees-ledger` | M5.4 | Needs Clarification (Open Item #6) |
-| **BR-23** | BR-23 (US-26, US-26A) | Linked audit trail for all financial adjustments and waivers | BRD §5.6, SRS §5 Mod 6 | `fees-ledger`, `audit-reporting` | M5.4, M3.5 | Confirmed |
+| **BR-23** | US-26, US-26A | Linked audit trail for all financial adjustments, concessions, and reversals | BRD §5.6, SRS §5 Mod 6, §10 | `fees-ledger`, `audit-reporting` | M5.4, M3.5 | Confirmed |
 | **BR-24** | US-27 | Numbered individual receipt generation per recorded payment transaction | BRD §5.7, SRS §5 Mod 7 | `receipts` | M6.1 | Confirmed |
 | **BR-25** | US-28 | Final fees receipt issued ONLY upon 100% full payment across all fee heads | BRD §5.7, SRS §5 Mod 7 | `receipts` | M6.1 | Confirmed |
 | **BR-26** | US-27, US-28 | Required receipt elements: amount in words, payer details, Cashier & Principal signatures | BRD §5.7, SRS §5 Mod 7 | `receipts` | M6.1, M6.2 | Confirmed |
@@ -73,11 +73,68 @@ All 47 BRD requirements map to active SRS user stories. Detailed individual acce
 | **BR-45** | US-27, US-28 | Unified receipt numbering sequence across all receipt types and final receipt | BRD §5.7, SRS §5 Mod 7 | `receipts` | M6.1 | Confirmed |
 | **BR-46** | US-28 | Unnumbered fee statement accessible at any time regardless of dues status | BRD §5.7, SRS §5 Mod 7 | `receipts` | M6.1 | Confirmed |
 | **BR-47** | US-27, US-28 | Multi-receipt payment tracking: final receipt references all prior payment receipt IDs | BRD §5.7, SRS §5 Mod 7 | `receipts` | M6.1 | Confirmed |
-| **US-43** | None | Withdrawn story: automatic year-end fee closure / balance sweep | SRS §5 Mod 10, §10 | N/A | None | **Out of Scope** (Withdrawn) |
+| **DEL-01** | **US-40** | **Developer handover package**: setup guide, config settings, DB setup, clean-machine verification | SRS §5 Mod 10, §10, §11 | `audit-reporting`, `shared` | M8.1, M8.2 | Confirmed |
+| **DEL-02** | **US-41** | **Synthetic demo data**: seed script loading realistic fake data across sections, fees, payments, TC | SRS §5 Mod 10, §10, §11 | `infrastructure`, `shared` | M0.4, M2.3, M8.2 | Confirmed |
+| **DEL-03** | **US-39** | **Basic operational dashboard**: high-level student counts, seat capacity, fee totals, list alignment | SRS §5 Mod 10, §10 | `audit-reporting` | M3.5 | Confirmed |
+| **DEL-04** | **US-04** | **User account management**: admin create/deactivate staff accounts, password resets, role changes | SRS §5 Mod 1, §10 | `identity-access` | M3.1, M3.3 | Confirmed |
+| **WTH-01** | **US-43** | **Withdrawn story**: automatic year-end fee closure / balance sweep | SRS §5 Mod 10, §10 | N/A | None | **Out of Scope** (Withdrawn) |
 
 ---
 
-## 3. Role Constraints & Authorization Matrix
+## 3. Complete User Story Coverage Verification (43 Active Stories + 1 Withdrawn)
+
+The table below demonstrates 100% complete story-level coverage across all 43 active user stories and 1 explicitly withdrawn story.
+
+| Story ID | User Story Title | Priority | Primary BRD / Delivery Mapping | Target Module | Assigned Milestone | Status |
+|---|---|---|---|---|---|---|
+| **US-01** | Login with individual credentials | P1 | BR-01 | `identity-access` | M3.2 | Confirmed |
+| **US-02** | Role-based menu navigation and views | P1 | BR-03 | `identity-access`, `shared` | M2.4, M3.1 | Confirmed |
+| **US-03** | Sensitive student/parent data protection | P1 | BR-04 | `identity-access` | M3.1, M4.5 | Confirmed |
+| **US-04** | User account management & deactivation | P2 | Delivery / BR-01 | `identity-access` | M3.1, M3.3 | Confirmed |
+| **US-05** | Select active academic year | P1 | BR-02 | `academic-years` | M3.4 | Confirmed |
+| **US-06** | Manage academic years & annual boundaries | P2 | BR-02, BR-39 | `academic-years` | M3.4 | Confirmed |
+| **US-07** | Create admission application draft | P1 | BR-05, BR-09 | `admissions` | M4.1 | Confirmed |
+| **US-08** | Enter student personal & academic details | P1 | BR-05 | `admissions` | M4.1 | Confirmed |
+| **US-09** | Enter parent & guardian details | P1 | BR-06 | `admissions` | M4.1 | Confirmed |
+| **US-10** | Upload admission document checklist files | P1 | BR-07 | `documents`, `admissions` | M4.3 | Needs Clarification |
+| **US-11** | Track missing documents & completeness | P2 | BR-08 | `admissions` | M4.1, M4.2 | Confirmed |
+| **US-12** | Save & edit application draft | P1 | BR-09 | `admissions` | M4.1 | Confirmed |
+| **US-13** | Submit application for verification | P1 | BR-10 | `admissions` | M4.2 | Confirmed |
+| **US-14** | Principal review and admission decision | P1 | BR-10, BR-11, BR-38 | `admissions` | M4.2 | Confirmed |
+| **US-15** | Admission approval & fee record generation | P1 | BR-12, BR-37 | `admissions`, `fees-ledger` | M4.2, M5.1 | Confirmed |
+| **US-16** | Application list and status tracking | P2 | BR-08, BR-11 | `admissions` | M4.2 | Confirmed |
+| **US-17** | Manage receipt types & fee heads | P1 | BR-14, BR-41, BR-42 | `fee-configuration` | M5.1 | Needs Clarification |
+| **US-18** | Set yearly fee structure per standard | P1 | BR-13, BR-14, BR-44 | `fee-configuration` | M5.1 | Confirmed |
+| **US-19** | Manage vehicle transport places & tariffs | P2 | BR-15, BR-44 | `fee-configuration` | M5.1 | Needs Clarification |
+| **US-20** | View student fee breakdown & status | P1 | BR-14, BR-15, BR-16, BR-39 | `fees-ledger` | M5.3 | Confirmed |
+| **US-21** | Record offline payment across fee heads | P1 | BR-17, BR-18, BR-19, BR-37, BR-39, BR-43 | `fees-ledger` | M5.3 | Confirmed |
+| **US-22** | Record later installments & partial payments | P1 | BR-17, BR-43 | `fees-ledger` | M5.3 | Confirmed |
+| **US-23** | Real-time fee status & balance display | P1 | BR-19, BR-20 | `fees-ledger` | M5.3 | Confirmed |
+| **US-24** | Outstanding dues list by standard/section | P2 | BR-19, BR-39 | `fees-ledger` | M5.5 | Confirmed |
+| **US-25** | Payment history audit per student | P1 | BR-18 | `fees-ledger` | M5.3 | Confirmed |
+| **US-26** | Concession, negotiated fee, or extra charge | P2 | BR-21, BR-23, BR-40 | `fees-ledger` | M5.4 | Confirmed |
+| **US-26A**| Refund or payment correction via reversal | P2 | BR-22, BR-23 | `fees-ledger` | M5.4 | Needs Clarification |
+| **US-27** | Generate receipt for recorded payment | P1 | BR-24, BR-26, BR-45, BR-47 | `receipts` | M6.1 | Confirmed |
+| **US-28** | Final fees receipt & printable fee statement | P1 | BR-25, BR-26, BR-45, BR-46, BR-47 | `receipts` | M6.1, M6.2 | Confirmed |
+| **US-29** | Reprint receipts/documents with duplicate mark | P2 | BR-27 | `receipts` | M6.1 | Confirmed |
+| **US-30** | Multi-criteria student search | P1 | BR-28 | `student-records` | M4.4 | Confirmed |
+| **US-31** | Comprehensive student profile & history | P1 | BR-29 | `student-records` | M4.4 | Confirmed |
+| **US-32** | Mark student as Left / Transferred | P2 | BR-30 | `student-records` | M4.4 | Confirmed |
+| **US-33** | Immutable records & non-deletion guarantee | P1 | BR-30 | `student-records`, `infrastructure` | M4.4 | Confirmed |
+| **US-34** | Create annual certificate records | P1 | BR-32 | `certificates-lctc` | M6.3 | Confirmed |
+| **US-35** | Review & approve LC/TC (two-step) | P1 | BR-33, BR-36 | `certificates-lctc` | M6.3 | Needs Clarification |
+| **US-36** | Generate official LC/TC document | P1 | BR-34 | `certificates-lctc` | M6.3 | Needs Clarification |
+| **US-37** | Retrieve & reprint LC/TC with duplicate log | P2 | BR-35 | `certificates-lctc` | M6.3 | Confirmed |
+| **US-38** | System-wide append-only audit log | P1 | BR-11, BR-31 | `audit-reporting` | M3.5 | Confirmed |
+| **US-39** | Basic operational dashboard | P2 | Delivery | `audit-reporting` | M3.5 | Confirmed |
+| **US-40** | Developer handover package & setup guide | P2 | Delivery | `audit-reporting`, `shared` | M8.1, M8.2 | Confirmed |
+| **US-41** | Synthetic demo data seed script | P1 | Delivery | `infrastructure`, `shared` | M0.4, M2.3, M8.2 | Confirmed |
+| **US-42** | Seat limits enforcement | P1 | BR-38 | `admissions` | M4.2 | Needs Clarification |
+| **US-43** | Automatic year-end fee closure / balance sweep | N/A | Withdrawn | N/A | None | **Out of Scope** (Withdrawn) |
+
+---
+
+## 4. Role Constraints & Authorization Matrix
 
 Server-side enforcement on all endpoints and views; UI component hiding does not substitute for server authorization.
 
@@ -91,7 +148,7 @@ Server-side enforcement on all endpoints and views; UI component hiding does not
 
 ---
 
-## 4. System-Wide Business Invariants
+## 5. System-Wide Business Invariants
 
 | Invariant ID | Rule Description | Source Section | Target Module | Milestone | Status |
 |---|---|---|---|---|---|
@@ -108,7 +165,7 @@ Server-side enforcement on all endpoints and views; UI component hiding does not
 
 ---
 
-## 5. Non-Functional Requirements (NFR) Matrix
+## 6. Non-Functional Requirements (NFR) Matrix
 
 | NFR ID | Category | Requirement Specification | Source Section | Target Module | Milestone | Status |
 |---|---|---|---|---|---|---|
@@ -127,7 +184,7 @@ Server-side enforcement on all endpoints and views; UI component hiding does not
 
 ---
 
-## 6. Reports and Screen Projections
+## 7. Reports and Screen Projections
 
 | Report ID | Title & Description | Primary Consumers | Source Section | Target Module | Milestone | Status |
 |---|---|---|---|---|---|---|
@@ -140,7 +197,7 @@ Server-side enforcement on all endpoints and views; UI component hiding does not
 
 ---
 
-## 7. Scope Exclusions & System Boundaries
+## 8. Scope Exclusions & System Boundaries
 
 The following capabilities are explicitly declared **Out of Scope** in signed BRD v1.4 (§2.4) and signed SRS v1.4 (§1.2). They must not be implemented.
 
@@ -159,7 +216,7 @@ The following capabilities are explicitly declared **Out of Scope** in signed BR
 
 ---
 
-## 8. Clarification Register & Open Client Decisions
+## 9. Clarification Register & Open Client Decisions
 
 Cross-referenced directly to [OPEN_ITEMS.md](OPEN_ITEMS.md). All 16 items require written client approval before implementation logic is finalized.
 
@@ -184,9 +241,10 @@ Cross-referenced directly to [OPEN_ITEMS.md](OPEN_ITEMS.md). All 16 items requir
 
 ---
 
-## 9. Review & Verification Receipt
+## 10. Review & Verification Receipt
 
 - **Task Code:** M0.2 — Requirements Traceability
-- **Deliverable:** Full Requirements Traceability Matrix covering Functional, Roles, Business Invariants, NFRs, Reports, Exclusions, and Clarifications.
+- **Deliverable:** Full Requirements Traceability Matrix covering Functional, Delivery, Roles, Business Invariants, NFRs, Reports, Exclusions, and Clarifications.
+- **Story Coverage Attestation:** 43 active user stories (`US-01` to `US-42`, `US-26A`) + 1 withdrawn story (`US-43`, explicitly Out of Scope) verified against SRS v1.4 §5 and §10.
 - **Database Safety Guardrail:** Confirmed **Read-only**. Preserved git baseline `5e1c47e` and existing schema intact.
 - **Reviewer Assignment:** Submitted to **Ujwal** for independent review. Task author (Shashidhar) cannot self-approve.

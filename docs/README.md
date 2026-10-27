@@ -27,6 +27,7 @@ This documentation pack is derived from signed BRD v1.4 and SRS v1.4, approved 2
 - [API contract proposal](../API_SPEC.md) — resource groups/conventions, not existing endpoints.
 - [Logical data model](../DATA_MODEL.md) — entities/integrity rules, not SQL schema.
 - [Logical data dictionary](../DATA_DICTIONARY.md)
+- [Database schema & data inventory (M0.4)](DATABASE_SCHEMA_INVENTORY.md) — observed SQL tables, keys, constraints, triggers, RLS and gaps.
 - [Authorization matrix](../AUTHORIZATION_MATRIX.md)
 - [Security and privacy](../SECURITY_PRIVACY.md)
 - [Audit logging](../AUDIT_LOGGING.md)
