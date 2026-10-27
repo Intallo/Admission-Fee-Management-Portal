@@ -1,84 +1,66 @@
-# Team Roles & Responsibilities
+# Solo Project Ownership & Delivery Responsibilities
 
 **Project:** School Admission & Fee Management Portal  
 **Requirements baseline:** Signed BRD v1.4 and SRS v1.4, approved 22 October 2026  
-**Documentation version:** 1.0 — 26 October 2026  
-**Status:** Delivery ownership proposal aligned to the supplied repository archive and current Notion task plan.
+**Current operating mode:** Single implementer — Shashidhar Pawadashetti  
+**Owner contact:** shashipshetti@gmail.com  
+**Mode effective:** 27 October 2026
 
-> **Important distinction:** This file describes the four developers' delivery responsibilities. It does **not** define the application's business roles (Principal, Admission Officer, Accounts Officer, or technical System Administrator). Application permissions remain governed by the signed BRD/SRS and the approved authorization matrix.
+> This file describes delivery ownership, not the application's business roles. Principal, Admission Officer, Accounts Officer and technical System Administrator permissions remain governed by the signed BRD/SRS and accepted business/architecture decisions.
 
-## At a glance
+## Current ownership
 
-| Team member | Email | Delivery role | Primary ownership |
-|---|---|---|---|
-| **Shashidhar** | shashipshetti@gmail.com | Project Lead & Architecture / Integration Owner | Requirements traceability, architecture decisions, auth/RBAC integration, risk control, cross-module integration and release acceptance coordination |
-| **Ujwal** | bilagiujwal505@gmail.com | Admissions & Student Records Owner | Read-only schema inventory, admission lifecycle, student/year records, admission documents, LC/TC workflow and traceability support |
-| **Sujal** | sujalv641@gmail.com | Frontend / UI-UX & Quality Owner | UI architecture after ADR approval, accessible forms, navigation, print UX, frontend test harness, end-to-end and accessibility checks |
-| **Jeevan** | bennurjeevan@gmail.com | Fees / Ledger & Financial Integrity Owner | Fee configuration, offline payment flow, ledger/balances, approved adjustments/reversals, receipt eligibility and financial integrity tests |
+Shashidhar is the sole active implementation owner for planning, architecture, task execution, UI/API/domain implementation, test automation, integration, documentation, risk tracking, release preparation and handover across every milestone. No other developer is assigned active project work.
 
-## Current repository reality and team operating rule
+Historical commits, pull requests and submission records are retained as project history and must not be misrepresented as current assignments. The Notion Implementation Task Tracker is the source of truth for active task ownership and status. Reviewer is `Unassigned` in solo mode.
 
-The supplied `Admission-Fee-Management-Portal.zip` working tree contains the Supabase configuration, PostgreSQL migrations, synthetic seed, SQL integrity/verification tests, generated `src/types/database.types.ts`, and documentation. It does **not** contain a visible `package.json`, application route tree, UI components, API/service modules or application test runner in the working tree. A frontend may exist in another branch/repository, but it was not present in the supplied archive.
+## Repository reality and implementation guardrails
 
-Therefore:
+The observed `main` branch contains the Supabase/PostgreSQL foundation, SQL migrations/tests, generated TypeScript database types and documentation. The latest observed tree did not show a `package.json` or obvious application entry points, route tree, API runtime or application test runner. Confirm whether app code exists in another branch/repository before scaffolding a runtime.
 
-1. Begin with the baseline audit and read-only schema inventory.
-2. Do not infer that a Next.js or other application framework has been fully set up solely from the `.env.example` variable names.
-3. Do not begin framework, ORM, provider, directory or schema changes until the M1.1 architecture ADR is reviewed and approved.
-4. Use isolated local/test databases and synthetic fixtures for any future write tests. M0.4 against the retained/shared database is read-only.
-5. Keep the database state and baseline commit `5e1c47e` protected unless a separate reviewed task explicitly authorizes a change.
+1. Signed BRD v1.4 and SRS v1.4 remain authoritative. Do not silently invent business rules.
+2. Do not select or replace a framework, ORM, provider, API layout or schema before repository evidence and the required ADR/approval gates.
+3. Preserve baseline commit `5e1c47e` and the retained database. M0.4 inventory is read-only. No reset, reseed, migration, DDL/DML write, drop, truncate or delete against the retained database without a separate reviewed and explicitly approved change.
+4. Use isolated local/test databases and synthetic data for write-oriented tests.
+5. Use precise decimal/numeric INR arithmetic, never binary floating-point for money.
+6. Enforce authorization and validation server-side. Sensitive student/financial files must not be public by default.
+7. Admission must not be gated on payment; Admission Fee is variable; no automatic fee carry-forward; no hard deletes.
+8. Issue a final fees receipt only when all applicable fees are fully paid. Include Payer, Cashier and Manager (Principal) signature lines.
+9. Annual LC/TC issuance must not itself change the student status to Left/Transferred.
 
-## Shared responsibilities (all four members)
+## Solo workflow
 
-- Read the relevant signed BRD/SRS sections and the assigned task's dependencies, acceptance criteria, Database Impact and Submission Guide before work begins.
-- Work only within an assigned task; raise an issue instead of silently defining client policy.
-- Use task-specific branches and focused pull requests; never commit secrets, real student/parent records, bank/Aadhaar details, private documents or database dumps.
-- Prove the acceptance criteria with automated/manual test evidence. Record commands and actual results, not just “tested.”
-- Keep `Implementation Task Tracker` properties updated: Status, PR Link, Evidence Link and Risk / Blocker.
-- Submit via `In Review`; only the independent reviewer can accept the work. The task owner cannot approve their own PR.
-- Raise a separate, explicit migration/decision task for any schema change. A PR alone is not authorization to change the retained database.
-- Link follow-up tasks and unresolved decisions to the Notion Decision & Risk Register.
+- Assign active tasks and milestone leads to Shashidhar.
+- Set reviewer to `Unassigned`; do not assign the implementer to act as an independent reviewer.
+- Make focused changes and record the branch/PR/commit where applicable.
+- Complete a documented self-review against all acceptance criteria; run applicable automated checks and record exact commands/results.
+- Use isolated tests for database writes; state database impact accurately.
+- Track unresolved choices in the canonical Decision & Risk Register. Client/Principal policy approval remains a separate gate.
+- Keep status truthful. `Done` requires complete evidence and required approvals, not merely a commit.
+- Never describe self-review as independent peer approval.
 
-## Work ownership by milestone
+## Authority and approval boundaries
 
-| Milestone / workstream | Responsible owner | Supporting reviewer / collaborator | Constraint |
-|---|---|---|---|
-| M0.1 Git baseline verification | Shashidhar | Ujwal | Record branch, HEAD, status and files; no reset/clean/database writes |
-| M0.2 BRD/SRS traceability | Shashidhar | Ujwal | Signed v1.4 is source of truth |
-| M0.3 safe environment/script inventory | Shashidhar | Sujal | Inspect scripts before execution; never print secrets |
-| M0.4 schema/data inventory | Ujwal | Shashidhar | Strictly read-only; do not export sensitive records |
-| M0.5 decisions and risks | Shashidhar | Ujwal; all owners contribute | Open client rules remain open until written approval |
-| M1.1 architecture ADR | Shashidhar | Ujwal, Sujal, Jeevan provide module-specific input | Do not implement structural changes before approval |
-| M1.2 module boundaries | Sujal | Shashidhar | Starts after ADR approval |
-| M1.3 API/error contract | Shashidhar | Jeevan | Contract design only until implementation task is ready |
-| M1.4 private file/PDF design | Jeevan | Shashidhar; Sujal reviews print UX | No provider purchase or schema change without approval |
-| M2 foundation / test harness | Shashidhar (runtime/errors), Sujal (test/UI foundation), Jeevan (audit/financial cases) | Different owner reviews each PR | Test environment must be isolated |
-| M3 identity / authorization / settings | Shashidhar (identity/RBAC), Ujwal (academic year), Jeevan (audit event coverage) | Independent peer review | Role-authority conflict is a gate; least privilege by default |
-| M4 admissions / student records / documents | Ujwal (domain), Sujal (form UX), Shashidhar (access controls) | Cross-review per task | Admission cannot be gated on payment; private files; year scoping |
-| M5 fee configuration / offline ledger | Jeevan | Shashidhar financial/security review; Ujwal year-scope review | Exact INR arithmetic; no hard delete/carry-forward; approved rules only |
-| M6 receipts / LC-TC / PDFs | Jeevan (receipt eligibility), Ujwal (LC/TC workflow), Sujal (PDF/print UX) | Cross-module peer review | Final fees receipt only after full payment; certificate issue does not set Left/Transferred |
-| M7 QA / security / accessibility | Sujal (E2E/accessibility), Shashidhar (security/RBAC), Jeevan (financial reconciliation) | Independent reviewer | Synthetic test data only; no critical unresolved bypasses |
-| M8 handover / acceptance | Shashidhar (release gate), Ujwal (handover index) | All owners provide evidence | Client owns live hosting/ops/backups unless contract changes |
+- **Client/Principal:** approves unresolved business rules, school policy, required business acceptance and contractual changes.
+- **Shashidhar:** owns implementation, technical proposals, integration, testing and documentation. Solo ownership does not authorize unilateral changes to signed business policy or the retained database.
+- **External approvals:** any required Client/Principal sign-off remains a separate gate. Self-review and automated checks do not replace it.
 
-## Decision and review authority
+## Definition of Done
 
-- **Client/Principal:** approves unresolved business rules, school policy, fee exceptions, role authority and accepted deliverables.
-- **Shashidhar:** coordinates delivery and ADRs, tracks dependencies, performs integration and release-gate coordination. This does not authorize unilateral changes to signed business policy or the database.
-- **Feature owner:** implements and submits the assigned feature; cannot approve their own PR.
-- **Independent reviewer:** verifies the PR, acceptance criteria, test evidence, security/data invariants and documentation.
-- **Any team member:** may block work and request a decision if an implementation depends on an unresolved requirement or could affect retained data.
+- Each acceptance criterion has linked evidence.
+- Relevant tests/checks have actual pass/fail results.
+- Security, privacy, authorization, financial integrity and database safety are addressed for the change.
+- Documentation and known limitations are updated.
+- Required Client/Principal decisions and sign-offs are recorded.
+- No independent reviewer approval is claimed unless it actually occurred.
 
-## Definition of done
+## Active planning links
 
-A task is Done only when the artifact/PR is linked, every acceptance criterion has evidence, relevant tests pass, review/merge or documentation acceptance is recorded, documentation and known limitations are updated, and database-safety requirements have been met. See [`docs/team/REVIEW_AND_SUBMISSION_POLICY.md`](docs/team/REVIEW_AND_SUBMISSION_POLICY.md).
+- [Implementation Task Tracker](https://app.notion.com/p/31ce328026b74b789079f250f980c2c7)
+- [Milestone Tracker](https://app.notion.com/p/1c7e0e446b0e4d2b9689430c5fbd3d8f)
+- [Decision & Risk Register](https://app.notion.com/p/8ae373edaca94eecab0c475329710846)
+- [Solo workflow and implementation gates](docs/team/WORKFLOW_AND_HANDOFFS.md)
 
-## Individual role files
+## Historical records
 
-- [Shashidhar — Project Lead & Architecture](docs/team/SHASHIDHAR_PROJECT_LEAD.md)
-- [Ujwal — Admissions & Student Records](docs/team/UJWAL_ADMISSIONS_STUDENT_RECORDS.md)
-- [Sujal — Frontend, UI/UX & Quality](docs/team/SUJAL_FRONTEND_UX_QUALITY.md)
-- [Jeevan — Fees, Ledger & Financial Integrity](docs/team/JEEVAN_FEES_LEDGER.md)
-- [Task ownership matrix](docs/team/TASK_OWNERSHIP_MATRIX.md)
-- [Workflow and handoffs](docs/team/WORKFLOW_AND_HANDOFFS.md)
-- [Review and submission policy](docs/team/REVIEW_AND_SUBMISSION_POLICY.md)
-- [Team onboarding checklist](docs/team/TEAM_ONBOARDING_CHECKLIST.md)
+Older submission documents may identify their actual original author/reviewer. Preserve those records for audit/history; they are not active work assignments. Do not edit the signed BRD/SRS.

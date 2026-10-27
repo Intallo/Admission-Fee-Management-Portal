@@ -1,41 +1,30 @@
-# Team Onboarding Checklist
+# Solo Owner Setup Checklist
 
-## Access and setup (each contributor)
+## Before implementation
 
-- [ ] Accept invitation to the correct Notion workspace and confirm access to Project Hub, Implementation Task Tracker, Milestone Tracker and Decision & Risk Register.
-- [ ] Confirm repository URL, branch policy and access. The supplied archive's working tree does not show app code/package manifest; verify whether the intended application branch/repository is separate.
-- [ ] Read signed `docs/requirements/School_Admission_Portal_BRD_v1.4.md` and `SRS_v1.4.md`.
-- [ ] Read `README.md`, `DATABASE.md`, `CONTRIBUTING.md`, `QUALITY_GATE.md`, and this responsibility folder.
-- [ ] Confirm the project baseline and working-tree status before modifying anything.
-- [ ] Verify local tooling versions using non-destructive commands; do not print or share secret values.
-- [ ] Ensure `.env`, `.env.local`, `supabase/.temp/`, `supabase/.branches/`, service-role secrets, database passwords and real student data are excluded from all archives/commits.
-- [ ] Use synthetic fixtures for any demo or test.
+- [ ] Confirm repository URL, default branch, current HEAD and `git status --short`.
+- [ ] Verify baseline commit `5e1c47e` is present without checkout/reset/clean operations.
+- [ ] Read signed BRD v1.4 and SRS v1.4.
+- [ ] Inspect migrations, seed and SQL tests without executing writes against the retained database.
+- [ ] Confirm whether the actual application package/runtime is in another branch/repository; do not guess framework or entry points.
+- [ ] Check `.env.example` and tracked files only; never echo or commit `.env`, database passwords, service-role keys or personal data.
+- [ ] Record architecture/security/role uncertainties in the canonical Decision & Risk Register.
 
-## Person-specific first steps
+## For every task
 
-### Shashidhar
-- [ ] Verify repository HEAD/status/baseline and capture evidence.
-- [ ] Start the signed BRD/SRS traceability matrix.
-- [ ] Coordinate the read-only M0.4 review and architecture ADR inputs.
-- [ ] Keep role-authority and technical stack decisions visible as explicit gates.
+- [ ] Verify dependencies and Database Impact.
+- [ ] Complete implementation in a focused branch.
+- [ ] Run relevant automated checks using isolated data/environments.
+- [ ] Perform documented self-review against all acceptance criteria.
+- [ ] Update Notion with actual status, PR/commit, test evidence and known limitations.
+- [ ] Keep Reviewer `Unassigned`; do not claim independent peer approval.
+- [ ] Obtain any required Client/Principal sign-off separately.
 
-### Ujwal
-- [ ] Inventory schema metadata, relationships, RLS and migration history using read-only inspection.
-- [ ] Record existing-vs-proposed schema facts without exposing personal rows.
-- [ ] Map admission/student/academic-year fields and open status/seat policy questions.
+## Non-negotiable safety
 
-### Sujal
-- [ ] Confirm the source branch contains actual UI/app files or record that they are absent from the supplied archive.
-- [ ] Audit existing routes/components/test tooling only after repository access is confirmed.
-- [ ] Map required screens, form validation states, accessibility behavior and print scenarios from signed SRS.
-- [ ] Wait for M1.1/M1.2 approval before implementing a new framework or reorganizing structure.
-
-### Jeevan
-- [ ] Read the SQL integrity migrations and describe current payment/receipt/adjustment invariants.
-- [ ] Inspect verification/integrity test design and identify additional isolated test cases.
-- [ ] List fee policy decisions that need Principal/client approval before M5 implementation.
-- [ ] Do not run write-oriented tests against the retained/shared database.
-
-## Completion of onboarding
-
-Each person posts a short confirmation to the project lead stating: repository/Notion access is working, the applicable role document is read, the first assigned task is understood, and any missing access/files/decisions are identified. Never include credentials in that confirmation.
+- M0.4 remains read-only.
+- No retained database reset, reseed, migration or write without a separate reviewed and explicitly approved task.
+- No hard deletes, no automatic academic-year fee carry-forward, and no payment prerequisite for admission.
+- Use exact decimal/numeric INR arithmetic, never binary floating point for money.
+- A final fee receipt is issued only when applicable fees are fully paid and includes Payer/Cashier/Manager (Principal) signature lines.
+- LC/TC issuance must not by itself mark the student Left/Transferred.

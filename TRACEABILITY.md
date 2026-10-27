@@ -2,7 +2,7 @@
 
 **Task:** M0.2 — BRD & SRS v1.4 Requirements Traceability  
 **Task Owner:** Shashidhar (Project Lead & Architecture Owner)  
-**Independent Reviewer:** Ujwal (Admissions & Student Records Owner)  
+**Review Mode:** Solo implementation; no independent peer reviewer is assigned.
 **Authoritative Baselines:** Signed BRD v1.4 and Signed SRS v1.4 (Approved 22 October 2026)  
 **Database Impact:** Read-only (no database writes or schema changes performed)  
 **Status:** In Review (Revised per review findings)  
@@ -222,20 +222,20 @@ Cross-referenced directly to [OPEN_ITEMS.md](OPEN_ITEMS.md). All 16 items requir
 
 | Item # | Open Client Decision | Affected Requirements | Delivery Owner | Business Impact | Escalation Route |
 |---|---|---|---|---|---|
-| **1** | Additional receipt/form categories beyond Admission, Fees, Books, Transport | BR-14, US-17 | Jeevan | Determines fee configuration tables & receipt template layouts | Client contracting lead |
+| **1** | Additional receipt/form categories beyond Admission, Fees, Books, Transport | BR-14, US-17 | Shashidhar | Determines fee configuration tables & receipt template layouts | Client contracting lead |
 | **2** | Definition of "Admin" authority for fee master setup (Principal vs ACC) | BR-14, RC-03 | Shashidhar | Impacts authorization guards on fee configuration APIs | Principal / Client |
-| **3** | Uniform and Books fee heads: fixed vs variable per class | BR-13, US-18 | Jeevan | Dictates fee assessment auto-generation rules upon admission | School Administration |
-| **4** | Vehicle place tariff calculation basis (distance flat fee vs standard-specific) | BR-15, US-19 | Jeevan | Impacts vehicle place schema and tariff computation logic | Transport Lead / Principal |
-| **5** | Seat release protocol for approved applicants who fail to join | BR-38, US-14, US-42 | Ujwal | Determines admission status state transitions (`Expired` / `Cancelled`) | Principal |
-| **6** | Admission Fee refundability policy and partial correction workflows | BR-22, US-26A | Jeevan | Affects financial reversal constraints and adjustment journal | Accounts Lead / Principal |
-| **7** | Scope of 100-seat capacity limit (per section, per standard, or school-wide) | BR-38, US-42 | Ujwal | Modifies admission approval validation triggers | Principal |
-| **8** | Policy for issuing Leaving/Transfer Certificates with unpaid fee balances | BR-33, US-35 | Ujwal | Determines hard block vs Principal warning override on TC issue | Principal |
-| **9** | Inclusion and placement of sensitive fields (caste, parent income, occupation) | BR-04, US-03, US-08 | Ujwal | Determines admission form schema and server privacy filters | Principal |
-| **10** | Mandatory minimum age validation thresholds per grade level | BR-05, US-08 | Ujwal | Controls client/server form validation warning triggers | School Administration |
-| **11** | Finalized application status state machine transitions | BR-11, US-16 | Ujwal | Determines allowable workflow actions per status in UI/API | Project Lead / Principal |
-| **12** | Official format, serial numbering scheme, and duplicate rules for LC/TC | BR-34, US-36 | Ujwal | Impacts PDF generator template and certificate counter table | Principal |
-| **13** | High-resolution school letterhead, stamps, and physical receipt samples | BR-26, US-27, US-28 | Sujal | Prerequisite for pixel-perfect PDF report rendering | Client Admin |
-| **14** | Mandatory vs optional document upload checklist per standard | BR-07, US-10 | Ujwal | Impacts admission completeness validation rules | Admission Lead |
+| **3** | Uniform and Books fee heads: fixed vs variable per class | BR-13, US-18 | Shashidhar | Dictates fee assessment auto-generation rules upon admission | School Administration |
+| **4** | Vehicle place tariff calculation basis (distance flat fee vs standard-specific) | BR-15, US-19 | Shashidhar | Impacts vehicle place schema and tariff computation logic | Transport Lead / Principal |
+| **5** | Seat release protocol for approved applicants who fail to join | BR-38, US-14, US-42 | Shashidhar | Determines admission status state transitions (`Expired` / `Cancelled`) | Principal |
+| **6** | Admission Fee refundability policy and partial correction workflows | BR-22, US-26A | Shashidhar | Affects financial reversal constraints and adjustment journal | Accounts Lead / Principal |
+| **7** | Scope of 100-seat capacity limit (per section, per standard, or school-wide) | BR-38, US-42 | Shashidhar | Modifies admission approval validation triggers | Principal |
+| **8** | Policy for issuing Leaving/Transfer Certificates with unpaid fee balances | BR-33, US-35 | Shashidhar | Determines hard block vs Principal warning override on TC issue | Principal |
+| **9** | Inclusion and placement of sensitive fields (caste, parent income, occupation) | BR-04, US-03, US-08 | Shashidhar | Determines admission form schema and server privacy filters | Principal |
+| **10** | Mandatory minimum age validation thresholds per grade level | BR-05, US-08 | Shashidhar | Controls client/server form validation warning triggers | School Administration |
+| **11** | Finalized application status state machine transitions | BR-11, US-16 | Shashidhar | Determines allowable workflow actions per status in UI/API | Project Lead / Principal |
+| **12** | Official format, serial numbering scheme, and duplicate rules for LC/TC | BR-34, US-36 | Shashidhar | Impacts PDF generator template and certificate counter table | Principal |
+| **13** | High-resolution school letterhead, stamps, and physical receipt samples | BR-26, US-27, US-28 | Shashidhar | Prerequisite for pixel-perfect PDF report rendering | Client Admin |
+| **14** | Mandatory vs optional document upload checklist per standard | BR-07, US-10 | Shashidhar | Impacts admission completeness validation rules | Admission Lead |
 | **15** | Initial system administrator bootstrap and forced initial password change | RC-04, US-04 | Shashidhar | Controls initial authentication seed and user provisioning security | Technical Lead |
 | **16** | Archival and retention schedule for audit logs and student file attachments | NFR-06, US-38 | Shashidhar | Influences storage bucket retention policies and database pruning | Client Compliance |
 

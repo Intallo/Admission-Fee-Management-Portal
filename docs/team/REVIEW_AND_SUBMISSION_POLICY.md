@@ -1,48 +1,45 @@
-# Review and Submission Policy
+# Review, Self-Check and Submission Policy — Solo Owner Mode
 
-## What to submit
+## Current ownership
 
-Every task submission must include:
+Shashidhar (`shashipshetti@gmail.com`) is the only active implementation owner. The Notion task tracker uses Owner = Shashidhar and Reviewer = Unassigned. Historical submission documents may preserve prior contributor names as audit evidence; they do not confer active assignments.
 
-- Notion task link and exact task title/code.
-- PR/artifact link and a concise summary of the delivered change.
-- Acceptance-criteria checklist with a result and evidence for each item.
-- Actual test commands and pass/fail results; link to CI where available.
-- Screenshots, generated PDF sample, diagram, inventory or report where relevant. Use synthetic/masked data.
-- Database-impact statement: `Read-only`, `Application-only`, or the separate approved migration reference.
-- Known limitations, blockers, open decisions and follow-up task links.
+## What every submission must contain
 
-Fill in the Notion task's `PR Link`, `Evidence Link`, and `Risk / Blocker`. Change Status to `In Review`. The `Assignee Email` property is tracking information; do not assume it sends a notification automatically.
+- Exact task title/code and Notion link.
+- PR, commit or artifact link and concise change summary.
+- Acceptance-criteria checklist with a result and evidence for each criterion.
+- Actual commands and test/check results; link to CI where available.
+- Screenshots/PDF samples/diagrams where relevant, using synthetic data.
+- Database-impact statement: `Read-only`, `Application-only`, `Migration proposal only` or `Approved write required`.
+- Known limitations, unresolved decisions and follow-up links.
+- Updated Notion PR Link, Evidence Link and Risk / Blocker fields.
 
-## Pull-request review requirements
+## Self-review in solo mode
 
-Reviewers verify:
+1. Check each acceptance criterion against the signed requirement or accepted ADR.
+2. Inspect the full diff for scope, secrets, real personal/financial data, authorization, validation, error handling, audit behavior and database impact.
+3. Run relevant automated unit/integration/E2E/security checks with isolated test data.
+4. Record exact commands, outputs, pass/fail results and remaining gaps.
+5. Set task status to `In Review` while evidence or required approvals remain outstanding.
+6. Do not assign yourself as a reviewer or represent self-review as independent peer approval.
+7. Client/Principal business decisions and required acceptance approvals remain separate and mandatory.
 
-1. The change matches signed requirements or an accepted ADR.
-2. Scope is limited to the task; no unrelated refactor or feature expansion.
-3. Correct access control is enforced server-side for sensitive reads and writes.
-4. Database and financial invariants are preserved; migration files are explicitly reviewed.
-5. Validation, errors, audit logging and failure/retry behavior are covered where relevant.
-6. Unit/integration/E2E tests and evidence are credible and reproducible.
-7. No secrets, real personal data or database dump entered the repository or screenshots.
-8. Documentation and open-item links are current.
+## When a task is Done
 
-The author may respond to comments but cannot approve their own PR. Schema, RLS, authorization, financial and document privacy changes need a reviewer with the relevant domain knowledge; get a second reviewer where practical.
+- Every acceptance criterion has evidence.
+- Relevant automated checks pass and results are linked.
+- Documentation and known limitations are updated.
+- Database-safety requirements are met and recorded.
+- Any required Client/Principal decision or acceptance is recorded.
 
-## Database-impact rule
+Solo self-review and a merged PR alone do not replace an external approval that is required by the signed requirements or engagement.
 
-- **Read-only:** no write query, migration, seed, reset, schema change or record export from the retained/shared DB.
-- **Application-only:** code changes only; use isolated tests and don't change the retained schema.
-- **Migration proposal only:** provide SQL, motivation, before/after impact, constraints/RLS impact, backup/rollback plan and isolated test evidence. It is not authorization to apply the migration.
-- **Approved write required:** only after the separate approval record exists and the target environment is explicitly verified. Never assume a PR approval alone authorizes production/shared DB writes.
+## Database impact rules
 
-The retained database must not be reset, reseeded, dropped, truncated, deleted from or altered without a separate reviewed and explicitly approved task. M0.4 stays read-only.
+- **Read-only:** no writes, schema change, migration, seed, reset or record export from the retained/shared DB.
+- **Application-only:** code changes only; test against isolated fixtures.
+- **Migration proposal only:** provide SQL, rationale, impact, RLS/constraint implications, backup/rollback plan and isolated test evidence; do not execute.
+- **Approved write required:** proceed only when an explicit reviewed approval exists and the target environment is verified.
 
-## Completion states
-
-- **In Progress:** actively being worked on.
-- **In Review:** submission and evidence are complete; reviewer action is pending.
-- **Blocked:** safe completion requires a decision, dependency or access change.
-- **Done:** accepted and merged (or document artifact accepted), criteria evidenced, tests pass and Notion properties updated.
-
-Do not mark Done because code merely exists or because the author locally tested it once.
+Never commit secrets, service-role keys, real student/parent/financial records or database dumps.

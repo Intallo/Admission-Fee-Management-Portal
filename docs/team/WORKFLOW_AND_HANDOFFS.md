@@ -1,63 +1,36 @@
-# Workflow and Handoffs
+# Solo Workflow and Implementation Gates
 
 ## 1. Task lifecycle
 
 `Backlog → Ready → In Progress → In Review → Done`
 
-Use `Blocked` when a dependency, repository access, environment issue, business rule or approval prevents safe progress. Put the specific reason and decision link in the Notion task's Risk / Blocker field. Do not move a task to In Progress merely because it was assigned; verify its dependencies first.
+Use `Blocked` when a missing source path, dependency, business rule or approval prevents safe progress. Record the reason in Notion Risk / Blocker. Assignment alone does not mean a task is ready.
 
 ## 2. Before implementation
 
-1. Read the task and relevant signed BRD/SRS story.
-2. Check the task's Dependencies and Database Impact.
-3. Confirm the source branch/repository and current state.
-4. Verify the code path actually exists. The supplied archive currently contains the database foundation, SQL integrity rules, seed/tests and database types, but no visible app manifest/routes/components/API services.
-5. If code or a decision is missing, record it and escalate. Don't invent schema/API/framework details.
-6. Make sure the local/test database is isolated before running write-oriented tests.
+1. Read the task, dependencies, Database Impact and signed BRD/SRS story.
+2. Confirm the current Git branch and actual code path exists.
+3. The current `main` tree does not visibly show an application package manifest or runtime entry points; confirm whether the app exists elsewhere before scaffolding.
+4. Do not invent framework/API/schema choices. Keep proposed architecture as proposed until the ADR is accepted.
+5. Ensure write-oriented tests use an isolated local/test database, never the retained database.
 
-## 3. Git branch and PR
+## 3. Git and evidence
 
-- Create a focused task branch from the team-approved baseline; put task code in the branch/PR title where practical.
-- Make small commits that can be reviewed independently.
-- Run only checks safe for the intended environment. Inspect scripts before execution.
-- Provide a PR description with purpose, requirements, changes, tests, data impact, risk, screenshots and rollback notes if relevant.
-- Request review from a teammate who did not author the change.
-- Merge only according to repository policy after approval and required checks pass.
+- Use a focused task branch and small, meaningful commits.
+- Make changes against the agreed baseline; do not use destructive reset/clean to force a match.
+- Inspect scripts before execution.
+- Record exact test commands and pass/fail results.
+- Link the PR/commit/artifact, test evidence, known limitations and database-impact statement in Notion.
+- Reviewer remains `Unassigned` during solo mode. Do not claim independent peer approval.
 
-## 4. Cross-team handoff contracts
+## 4. Self-review and approvals
 
-### Ujwal → Sujal
+For every task, check each acceptance criterion, negative path, authorization rule, error path and relevant safety constraint. Run applicable automated tests and capture reproducible evidence. A self-review is not independent peer approval. Client/Principal decisions, required business sign-offs and contractual acceptance remain separate gates.
 
-Provide approved field names, required/optional status, validation rules, application state transitions, document requirements and authorization-visible states. Flag open client decisions. Sujal should not invent fields or statuses from a mockup.
+## 5. Database protection
 
-### Sujal → Ujwal
+M0.4 is strictly read-only. Do not run reset, reseed, migration, DDL/DML write, DROP, TRUNCATE or DELETE against the retained database unless a separate task was reviewed and explicitly approved for that target. A PR or self-review alone does not authorize a retained-database write.
 
-Provide UI behavior, accessible error handling, screenshots with synthetic data, form interaction details and any UX assumptions requiring client confirmation. Ensure disabled/hidden UI states are consistent with the domain rules but never replace server authorization.
+## 6. Escalation rules
 
-### Ujwal → Jeevan
-
-Provide canonical student, academic-year and student-academic-record identifiers; clarify which status/transition is authoritative. Do not let annual certificate creation silently set student status or copy balances across years.
-
-### Jeevan → Sujal
-
-Provide fee/payment response shapes, decimal amount examples, per-head and net balances, receipt eligibility conditions, receipt numbering results and approved print fields. Include partial/full payment and error examples. Do not create official values solely in the browser.
-
-### Jeevan → Ujwal
-
-Agree fee assignment and year scoping, receipt/certificate references and how a certificate relates to student-year records. Keep payment history immutable and financial policy explicit.
-
-### Feature owners → Shashidhar
-
-Before integration, share contract/PR and evidence. Shashidhar coordinates route/API ownership, authorization requirements, configuration, audit events, error conventions and release gate. Changes across modules must be discussed before merging when they alter a shared contract.
-
-## 5. Escalation rules
-
-Set a task to Blocked and record a question instead of guessing when:
-- signed requirements and current code conflict;
-- a role/permission is unclear;
-- a policy remains marked working/open in SRS v1.4;
-- a migration/schema change appears necessary;
-- the task depends on a package/runtime/source directory absent from the supplied archive;
-- the available credentials point at a shared/production database rather than an isolated local test DB.
-
-The Principal/client confirms business policy; technical architecture decisions follow ADR review; data changes follow a separately approved migration task.
+Stop and mark Blocked rather than guessing when signed requirements conflict with existing code, a role boundary is unclear, a fee/TC/seat policy is unresolved, required source/runtime is missing, or a migration appears necessary. Technical implementation ownership is solo; business authority remains with the Client/Principal under the signed agreement.
