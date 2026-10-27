@@ -28,6 +28,7 @@ This folder defines how work is divided between the four project contributors. T
 - [M0.2 — Requirements Traceability Submission (Owner: Shashidhar, Reviewer: Ujwal)](M0_2_SUBMISSION.md)
 - [M0.3 — Environment & Script Safety Inventory (Owner: Shashidhar, Reviewer: Sujal)](M0_3_SUBMISSION.md)
 - [M0.4 — Read-Only Database Schema & Data Inventory (Owner: Ujwal, Reviewer: Shashidhar)](M0_4_SUBMISSION.md)
+- [M0.5 — Decision & Risk Consolidation (Owner: Shashidhar, Reviewer: Ujwal)](M0_5_SUBMISSION.md)
 
 ## Project-specific safety gate
 

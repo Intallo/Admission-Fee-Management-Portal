@@ -40,6 +40,7 @@ This documentation pack is derived from signed BRD v1.4 and SRS v1.4, approved 2
 - [Performance plan](../PERFORMANCE.md)
 - [Quality gate](../QUALITY_GATE.md)
 - [Traceability](../TRACEABILITY.md)
+- [Decision & Risk Register (M0.5)](DECISION_AND_RISK_REGISTER.md) — canonical register of decisions, risks and open items.
 - [Open client decisions](../OPEN_ITEMS.md)
 - [Decision log](../DECISIONS.md)
 - [Release plan](../RELEASE_PLAN.md)
