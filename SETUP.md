@@ -1,67 +1,92 @@
 # Setup and Handover Guide
 
-> **Source audit required:** This pack was generated from signed BRD/SRS, not an inspected runnable repository. GitHub connector access to the reference repo returned 404. Exact commands, runtime versions and environment-variable names must be verified during M0.1/M1; do not guess them or run unknown scripts against the retained database.
+> **Baseline Status (M0.3 Audited):** This guide reflects direct inspection of repository manifests, local tooling, configuration files, and SQL test scripts. Commands and dependencies are separated into mandatory baseline vs optional tooling.
 
-## 1. Responsibility boundary
-Intallo delivers source code, database scripts, synthetic seed, setup guide, technical notes and acceptance evidence. Client owns deployment/hosting/domain/HTTPS, live security, database operations, backups/restore, monitoring, training and live operation/maintenance per signed scope.
+---
 
-## 2. Preflight
-- Confirm repo URL, approved branch/commit and working tree.
-- Inspect README, runtime manifests, scripts and CI workflows.
-- Record actual runtime/package manager/service versions after verification.
-- Read all database scripts before execution; identify reset/seed/migration/write behavior.
-- Use a disposable test database for write-based tests.
-- Confirm secrets are supplied securely and never committed.
-- Confirm uploaded files reside in configurable private storage outside the public path.
+## 1. Responsibility Boundary
+- **Intallo:** Delivers source code, database scripts, synthetic seed, setup guide, technical notes, and acceptance evidence.
+- **Client:** Owns deployment/hosting, domain/DNS, live HTTPS/TLS, production database operations, backup/restore schedules, monitoring, end-user training, and ongoing maintenance per signed engagement terms.
 
-## 3. Baseline verification (read-only)
-Record current branch/HEAD, `git status --short`, presence of `5e1c47e`, and observed locations of schema, integrity migrations, synthetic seed, local Supabase config and verification script. Inspect the verification script for side effects before running it.
-Never run `git reset`, `git clean`, reset/seed/migration or write SQL to force a desired state. If baseline or data differs, document and raise a reviewed task.
+---
 
-## 4. Environment
-Record exact variable names in [`docs/ENVIRONMENT_VARIABLES.md`](ENVIRONMENT_VARIABLES.md) only after source inspection. Categories to check include DB connection, auth/session secrets, app origin/port, private file storage and PDF/log settings; **these are categories, not confirmed keys**.
-- Keep `.env.example` placeholder-only.
-- Ignore `.env`, credentials, private keys, DB dumps and uploads.
-- Fail clearly when required config is missing; redact secrets in logs/errors.
-- Separate server-only secrets from public browser variables.
+## 2. Verified Tooling & Runtime Inventory
 
-## 5. Database rules
-The signed SRS expects scripts for a clean target database, reference data, restricted application user, tests and fake seed. That is not authorization to run them against the retained database.
-- M0.4 remains read-only.
-- Schema changes require a separate reviewed task/ADR, exact migration, impact, backup/rollback plan, isolated test evidence and explicit approval.
-- Test migrations only on disposable isolated DBs.
-- Use synthetic fixtures; no real student records in seed/tests.
-- App DB role must lack DELETE on core tables and UPDATE on payment ledger, receipts and audit log as SRS US-33 specifies.
-- Never attach production connection strings, dumps or credentials.
+Direct execution on the development host verified the following tool inventory:
 
-## 6. Commands (fill after verifying repo)
-| Action | Verified command | Notes |
-|---|---|---|
-| Install dependencies | TODO — inspect manifest/lockfile | Do not choose a package manager by assumption. |
-| Start local services | TODO — inspect local configuration | Must not target retained/production DB by default. |
-| Start application | TODO — inspect scripts | Record URL and healthy startup message. |
-| Unit tests | TODO — inspect test runner | Synthetic data. |
-| Integration tests | TODO — isolated test DB only | Never use retained DB for writes. |
-| E2E tests | TODO — inspect configured runner | Verify base URL and cleanup targets. |
-| Lint/type/build | TODO — inspect scripts | Record versions/results. |
-| Business-rule DB test script | TODO — inspect script body before execution | Do not run until side effects known. |
+| Tool / Runtime | Verified Version | Status | Architectural Role | Mandatory / Optional |
+|---|---|:---:|---|:---:|
+| **Node.js** | `v24.12.0` | **Installed** | Application runtime for Next.js / React frontend shell | Mandatory for app runtime |
+| **npm** | `11.6.2` | **Installed** | Node package manager for installing frontend packages | Mandatory for app dependencies |
+| **Git** | `2.48.1.windows.1` | **Installed** | Version control and task-branch workflow | Mandatory |
+| **Docker Desktop** | `29.8.2 (build 7fc2dff)` | **Installed** | Local container engine required to run the local Supabase stack | Mandatory for local DB stack |
+| **Python** | `3.14.2` | **Installed** | Host scripting / build utility | Optional helper |
+| **Supabase CLI** | *Not Found on PATH* | **BLOCKER** | CLI for `supabase start`, `supabase migration`, `supabase gen types` | **Mandatory local prerequisite** |
+| **Application Manifest** | `package.json` *Not Present* | **PENDING** | Node project configuration, dependencies, and build scripts | Pending Milestone M1.1 ADR |
 
-SRS US-40 requires successful clean-machine reproduction before handover.
+---
 
-## 7. Initial administrator
-SRS A-21 proposes a setup script for first technical administrator and forced password change. That assumption and SYSADMIN role need approval. Never commit default credentials; use a secure one-time bootstrap and password hashing, and document verified process only after implementation.
+## 3. Baseline Verification (Read-Only)
+- Current baseline commit: `5e1c47e` (Initial Supabase database schema and seed data).
+- Hardening migration commit: `d768254` (`20261022090000_harden_financial_integrity.sql` and `supabase/tests/integrity_tests.sql`).
+- Remote Supabase project reference: `fjrfyzamiirqzitdchkz` (`https://supabase.com/dashboard/project/fjrfyzamiirqzitdchkz`).
+- Retained database state: Schema and synthetic demonstration data were applied to the hosted project prior to baseline repository creation. M0.3 inspection is strictly read-only.
 
-## 8. Documents and PDF
-Use private configurable storage outside public web path, validate file type/size, authorize every upload/preview/download, preserve prior versions and record uploader/time. Generate official receipts/TCs server-side from authorized data and immutable issue snapshots.
+---
 
-## 9. Live operation
-Client manages HTTPS, server hardening, least-privilege secrets, production monitoring, scheduled DB/file backups and restore testing. This guide may recommend these controls but must not claim Intallo operates them. Client verifies physical printer layout after deployment.
+## 4. Environment Variables Register
+Tracked configuration keys are fully documented in [`ENVIRONMENT_VARIABLES.md`](ENVIRONMENT_VARIABLES.md).
+- **Public Client Keys:** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (Safe for browser bundle).
+- **Protected Server Secrets:** `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL` (**CRITICAL SECRETS**; never expose to browser or commit to git).
+- Keep [`.env.example`](.env.example) placeholder-only.
+- All real environment files (`.env`, `.env.local`) are ignored via [`.gitignore`](.gitignore).
 
-## 10. Release setup checklist
-- [ ] Clean-machine setup commands verified.
-- [ ] Actual runtime versions and environment keys documented.
-- [ ] Database scripts reviewed/tested only on approved clean target.
-- [ ] Synthetic seed and business-rule tests validated.
-- [ ] Restricted DB app role and file permissions checked.
-- [ ] Source, setup guide, technical notes and test evidence delivered.
-- [ ] Client ownership of hosting, live security, backups, operations, training and maintenance acknowledged.
+---
+
+## 5. Verification Script Safety Review
+
+The repository contains two SQL test scripts under `supabase/tests/`. Their safety profiles are evaluated below:
+
+### 1. `supabase/tests/verification.sql` (Read-Only Verification Script)
+- **Behavior:** Executes a single `SELECT jsonb_build_object(...)` statement querying table metadata and record aggregates.
+- **Checks Performed:**
+  - Table count: `information_schema.tables` where `table_schema = 'public'`.
+  - RLS verification: `bool_and(c.relrowsecurity)` across all public relation tables.
+  - Record counts: `students`, `guardians`, `admission_applications`, `payments`, `payment_allocations`, `receipts`, `consolidated_receipts`, `student_year_certificates`.
+  - Financial consistency: Confirms payment amount equals allocation sums; checks cross-student allocation boundaries; checks consolidated receipt amount totals.
+- **Database Writes:** **ZERO.** Does not contain `INSERT`, `UPDATE`, `DELETE`, `DROP`, `TRUNCATE`, `ALTER`, or `CREATE`.
+- **Safety Classification:** **SAFE** to run against any database, including the retained shared database.
+
+### 2. `supabase/tests/integrity_tests.sql` (Constraint & Negative Test Script)
+- **Behavior:** Defines temporary PL/pgSQL functions (`pg_temp.expect_reject`) to test boundary constraints (e.g. overpayment, cross-category payment, unauthorized adjustment, and invalid reversals).
+- **Database Writes:** Executes speculative DML write statements inside `BEGIN ... EXCEPTION ... ROLLBACK` blocks.
+- **Safety Classification:** **RESTRICTED.** Must **NEVER** be run against the retained shared database. Run strictly against a disposable local Docker database.
+
+---
+
+## 6. Commands & Safe Execution Runbook
+
+| Lifecycle Action | Safe Command | Target Environment | Safety Notes |
+|---|---|---|---|
+| **Check Tooling** | `node -v; npm -v; git --version; docker --version` | Local Host | Completely non-destructive. |
+| **Install Supabase CLI** | `npm install -g supabase` *or* `winget install Supabase.CLI` | Local Host | Required to resolve the local environment blocker. |
+| **Start Local Stack** | `supabase start` | Local Docker | Starts local PostgreSQL 17, PostgREST, Auth, Storage, and Studio. |
+| **Disposable Reset** | `supabase db reset` | **LOCAL DOCKER ONLY** | **DESTRUCTIVE.** Runs all migrations and loads `seed.sql`. **NEVER** run against remote/retained DB. |
+| **Check Local Migrations** | `supabase migration list --local` | Local Workspace | Inspects migration timestamps without executing SQL. |
+| **Generate TS Types** | `supabase gen types typescript --local > src/types/database.types.ts` | Local Workspace | Generates type definitions from local schema. |
+| **Run Safe Verification** | `psql <connection-string> -f supabase/tests/verification.sql` | Any / Retained DB | Read-only JSON validation report. |
+| **Run Negative Tests** | `psql <local-connection-string> -f supabase/tests/integrity_tests.sql` | **LOCAL DISPOSABLE ONLY** | Tests rejection triggers; rolls back all operations. |
+
+---
+
+## 7. Known Environment Blockers & Missing Prerequisites
+
+1. **Supabase CLI Not on PATH:**
+   - **Impact:** Cannot execute `supabase start`, `supabase db reset`, or regenerate TypeScript database types locally.
+   - **Remediation:** Install Supabase CLI via `npm install -g supabase` or Scoop/Homebrew/Winget.
+2. **Missing Application Manifest (`package.json`):**
+   - **Impact:** Frontend/backend application code cannot be installed, built, or tested locally yet.
+   - **Remediation:** Expected at this stage; milestone M1.1 (Architecture ADR) must first evaluate and approve the application framework and module scaffolding.
+3. **Docker Desktop Configuration Access Warning:**
+   - **Impact:** Docker version 29.8.2 is installed, but CLI warned `open C:\Users\shash\.docker\config.json: Access is denied`.
+   - **Remediation:** Ensure Docker Desktop is launched with appropriate user privileges before starting the local Supabase container stack.
