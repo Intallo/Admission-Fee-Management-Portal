@@ -2,7 +2,7 @@
 
 - **Status:** Proposed / Pending Approval
 - **Date Created:** 2026-10-26
-- **Date Revised:** 2026-10-27 (Post-M0 Repository Audit & M1.1 Finalization)
+- **Date Revised:** 2026-10-28 (Post-M0 Audit, Supabase API Key Policy & Atomic Financial Operations Finalization)
 - **Document Code:** M1.1 — Architecture Decision Record
 - **Task Owner:** Shashidhar Pawadashetti (Project Lead & Architecture Owner)
 - **Approvers:** 
@@ -15,12 +15,12 @@
 ## 1. Context & Verified Repository Baseline
 
 ### 1.1 Verified Repository Identity & Baseline State
-The strictly read-only repository audit conducted on 2026-10-27 established the following facts:
-- **Active Task Branch:** `task/m1-1-adr-review` (branched from canonical `main` at `3536bc1933e4e9fc7a7be96d56767b65a994343c`).
+The strictly read-only repository audit established the following facts:
+- **Active Task Branch:** `task/m1-1-adr-policies` (branched from canonical `main` at `aed64f5efc2d0781ab12d3a9fdc0cdd0d269c7fc`).
 - **Protected Foundation Baseline:** Commit `5e1c47e0d85d5dbe54d84b1f3d31b87622e2f3ca` (initial database schema and synthetic demo baseline). This commit represents the foundational database contract and must be preserved without destructive reset or overwrite.
 - **Migration Artifact Status (Commit `d768254`):** Commit `d768254` introduced migration file `supabase/migrations/20261022090000_harden_financial_integrity.sql` and test script `supabase/tests/integrity_tests.sql`. This file is an in-tree **migration artifact**; it must **not** be assumed to have been applied to the retained remote database (`fjrfyzamiirqzitdchkz`). Verifying remote migration status belongs to a future dedicated comparison task.
 - **Canonical Remote Repository:** `https://github.com/Intallo/Admission-Fee-Management-Portal.git`.
-  - *Discrepancy Resolution:* Commit `6cd7998` merged PR #1 from personal fork `Shashidhar-Pawadashetti/task/m0-3-environment-safety`. Early task isolation used the personal fork, whereas the canonical organization repository is `Intallo/Admission-Fee-Management-Portal`, where PRs #2, #3, #4, and remote `origin` reside. Repository history will not be rewritten; all future PRs and documentation reference the canonical `Intallo` organization.
+  - *Discrepancy Resolution:* Commit `6cd7998` merged PR #1 from personal fork `Shashidhar-Pawadashetti/task/m0-3-environment-safety`. Early task isolation used the personal fork, whereas the canonical organization repository is `Intallo/Admission-Fee-Management-Portal`, where PRs #2, #3, #4, #5, and remote `origin` reside. Repository history will not be rewritten; all future PRs and documentation reference the canonical `Intallo` organization.
 - **Observed Source-Tree Status:** The repository contains complete specifications, database migrations, synthetic demo seed (`supabase/seed.sql`), and generated TypeScript schema types ([`src/types/database.types.ts`](../../src/types/database.types.ts)). It contains **zero application manifests (`package.json`), zero lockfiles, zero build configurations, and zero UI/API code**. Application scaffolding has not yet begun.
 
 ### 1.2 Handover and Operational Context
@@ -69,7 +69,8 @@ The read-only database inventory ([`docs/DATABASE_SCHEMA_INVENTORY.md`](../DATAB
    grant all on all sequences in schema public to service_role;
    ```
 
-### 3.2 Dual-Client Architecture: Separation of Privileged and SSR Clients
+### 3.2 Supabase API Key Policy & Dual-Client Architecture
+
 To avoid accidental privilege escalation and ensure strict defense-in-depth, the application strictly separates the **Cookie/Session SSR Client** from the **Privileged Server Data Client**:
 
 ```mermaid
@@ -78,7 +79,7 @@ flowchart TD
     -->|HTTP Request + Session Cookie| NextServer["Next.js Server / Route Handler"]
 
     subgraph ClientSeparation ["Strict Client Separation Boundary"]
-        NextServer --> SSRClient["1. Session & Auth Client (@supabase/ssr)<br>• Uses NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (sb_publishable_...)<br>• Runs in caller's unprivileged user context<br>• Validates session cookie, reads auth.users, extracts auth_user_id"]
+        NextServer --> SSRClient["1. Session & Auth Client (@supabase/ssr)<br>• Uses Supabase publishable key (sb_publishable_...)<br>• Runs in caller's unprivileged user context<br>• Validates session cookie, reads auth.users, extracts auth_user_id"]
         
         SSRClient --> AuthGuard{"2. Session Valid & Active?<br>staff_members.is_active = true"}
         AuthGuard -->|No / Inactive| Reject["401 Unauthorized / 403 Forbidden"]
@@ -92,12 +93,14 @@ flowchart TD
     DataClient --> PostgreSQL[("Supabase / PostgreSQL Database<br>(Fail-Closed RLS, 31 Tables)")]
 ```
 
-#### Key Formatting and Configuration Principles:
-1. **Modern Supabase Key Convention:** Prefer Supabase's current `sb_secret_...` key format and server-only `SUPABASE_SECRET_KEY` configuration. For backward compatibility with existing Supabase CLI baselines, fallback to `SUPABASE_SERVICE_ROLE_KEY` is supported.
-2. **Zero Client Leakage:** Neither `SUPABASE_SECRET_KEY` nor `SUPABASE_SERVICE_ROLE_KEY` may **ever** be prefixed with `NEXT_PUBLIC_` or bundled in client-facing code.
-3. **RLS-Bypass Implications of Elevated Key:** Because the privileged client holds PostgreSQL `BYPASSRLS` privileges, the database engine **will not filter rows or block unauthorized reads/writes at the SQL layer**. Therefore:
-   - All tenant/year scoping, active account validation, and role authorization **must** be enforced in server domain guards before issuing queries.
-   - Field-level masking of sensitive PII (Aadhaar, income, caste) must be applied programmatically before returning DTOs to callers.
+#### Supabase API Key Policy
+- Use the Supabase publishable key for browser-accessible and cookie/session-aware SSR clients.
+- Use `SUPABASE_SECRET_KEY` (`sb_secret_...`) only in trusted backend code where elevated access is specifically required.
+- Never prefix the secret key with `NEXT_PUBLIC_`, expose it to the browser, commit it to source control, or write it to application logs.
+- Keep legacy `anon` and `service_role` keys only where temporary compatibility requires them, with a migration and retirement plan.
+- Treat the secret key as a credential that bypasses Row Level Security (RLS). Every operation using elevated access must pass server-side authentication, role authorization, record-scope validation, and business-rule checks.
+- Keep the cookie/session-aware SSR client separate from the privileged server client.
+- Never assume RLS protects an operation performed with the secret key. Use RLS as defense in depth for clients operating under user-scoped credentials.
 
 ### 3.3 Security, Scoping & Governance Controls
 - **Authentication & Identity Linkage:** Authenticate staff email/password via Supabase Auth. The server maps `auth.users.id` -> `public.staff_members.auth_user_id`.
@@ -129,8 +132,13 @@ flowchart TD
 9. **Single Fee Category per Payment (DEC-10):** Every payment belongs to exactly one `fee_category` (`school_fee`, `vehicle`, `books`). Allocations cannot cross categories within a single payment.
 10. **Exact Decimal Monetary Arithmetic (DEC-11):** All currency calculations use exact decimal INR arithmetic (`numeric(10,2)` in DB; integer paise or `decimal.js` in Node.js). Floating-point math (`float`, `double`) is strictly banned.
 
-### 4.2 Multi-Step Financial Workflow Consistency & Atomic Database RPC
-Because separate web HTTP requests cannot form a single database transaction, multi-step financial collection operations must be executed as a **single atomic database transaction**.
+### 4.2 Atomic Financial Operations
+
+The payment-recording operation must be implemented as one transactional PostgreSQL RPC/stored function or one server-managed direct PostgreSQL transaction.
+
+The transaction must cover the payment record, fee allocations, receipt-number allocation, required receipt snapshot, and audit event. It must validate the applicable business rules, prevent duplicate submissions, and handle concurrent allocation safely. Failure at any stage must roll back the entire operation.
+
+Separate Supabase REST requests must not be treated as one transaction.
 
 ```mermaid
 sequenceDiagram
@@ -138,7 +146,7 @@ sequenceDiagram
     actor Cashier as Accountant (Cashier)
     participant API as Next.js API Route (/api/fees/payments)
     participant Service as FeesLedgerService
-    participant RPC as PostgreSQL Function (record_payment_and_issue_receipt)
+    participant RPC as PostgreSQL Transaction / Function (record_payment_and_issue_receipt)
     participant DB as PostgreSQL 17 Engine (Atomic Transaction)
     
     Cashier->>API: POST /api/fees/payments (Payment Payload)
@@ -147,12 +155,12 @@ sequenceDiagram
     
     rect rgb(240, 248, 255)
         note over Service,DB: Single Atomic Database Transaction Boundary
-        Service->>RPC: CALL record_payment_and_issue_receipt(...)
-        RPC->>DB: 1. INSERT INTO payments (...) RETURNING payment_id
-        RPC->>DB: 2. INSERT INTO payment_allocations (...) [Validate head dues & category]
-        RPC->>DB: 3. CALL next_receipt_number('RCT') [Row lock increment]
-        RPC->>DB: 4. INSERT INTO receipts (...) [Store rendered_snapshot JSONB]
-        RPC->>DB: 5. INSERT INTO audit_logs (...) [Audit entry]
+        Service->>RPC: CALL record_payment_and_issue_receipt(...) OR direct PG transaction
+        RPC->>DB: 1. INSERT INTO public.payments (...) RETURNING payment_id
+        RPC->>DB: 2. INSERT INTO public.payment_allocations (...) [Validate head dues & category]
+        RPC->>DB: 3. CALL public.issue_receipt_number('RCT') [Atomic row-lock increment]
+        RPC->>DB: 4. INSERT INTO public.receipts (...) [Store rendered_snapshot JSONB]
+        RPC->>DB: 5. INSERT INTO public.audit_logs (...) [Audit entry]
         RPC-->>DB: COMMIT TRANSACTION
     end
     
@@ -161,19 +169,23 @@ sequenceDiagram
     API-->>Cashier: 201 Created (Receipt Ready for Print)
 ```
 
-#### Database Function Specification for Future Implementation (Milestone M5.2):
-The atomic financial transaction will be encapsulated in a dedicated stored procedure / RPC with explicit security hardening:
-- **Function Ownership:** Owned by `postgres` (or trusted database administrator).
-- **Execution Context:** Defined as `SECURITY DEFINER` to guarantee atomic sequence locking and cross-table allocation checks.
-- **Search Path Protection:** Must explicitly declare `SET search_path = public, pg_temp;` to eliminate search_path hijacking vulnerabilities.
-- **Strict Privilege Grants:**
-  ```sql
-  REVOKE ALL ON FUNCTION public.record_payment_and_issue_receipt(...) FROM PUBLIC;
-  REVOKE ALL ON FUNCTION public.record_payment_and_issue_receipt(...) FROM anon;
-  REVOKE ALL ON FUNCTION public.record_payment_and_issue_receipt(...) FROM authenticated;
-  GRANT EXECUTE ON FUNCTION public.record_payment_and_issue_receipt(...) TO service_role;
-  ```
-- *Boundary Statement:* The schema change and SQL implementation of this function belong strictly to **Milestone M5.2**; zero database functions or migrations are created as part of this M1.1 ADR task.
+#### Function Architecture & Security Constraints
+- **Execution Model:** Database functions should use `SECURITY INVOKER` by default.
+- **Security Definer Justification & Requirements:** If `SECURITY DEFINER` is justified (e.g., to sequence row-level locks on counters across callers), its implementation must use:
+  - An **empty `search_path`** (`SET search_path = ''` in function definition) to prevent schema-hijacking attacks.
+  - **Schema-qualified object references** across all SQL statements (e.g., `public.payments`, `public.payment_allocations`, `public.receipt_number_counters`, `public.receipts`, `public.audit_logs`).
+  - **Narrowly granted EXECUTE permissions:**
+    ```sql
+    REVOKE ALL ON FUNCTION public.record_payment_and_issue_receipt(...) FROM PUBLIC;
+    REVOKE ALL ON FUNCTION public.record_payment_and_issue_receipt(...) FROM anon;
+    REVOKE ALL ON FUNCTION public.record_payment_and_issue_receipt(...) FROM authenticated;
+    GRANT EXECUTE ON FUNCTION public.record_payment_and_issue_receipt(...) TO service_role;
+    ```
+  - **Appropriate ownership:** Function owned by `postgres` (or trusted database administrator).
+  - **Explicit authorization checks:** Server-side verification of caller identity and role before invocation, and parameter verification within the function.
+
+#### Milestone and Boundary Invariant
+This ADR records the intended architecture only. Financial function implementation, migrations, and database permission changes belong to their scheduled implementation milestone (Milestone M5.2) and require the applicable approval. No retained database changes are permitted during M1.1.
 
 ---
 
@@ -212,6 +224,7 @@ Before any pull request is merged, the following automated negative verification
 |---|---|---|---|
 | 1.0 | 2026-10-26 | Shashidhar Pawadashetti | Initial architectural proposal and evaluation criteria. |
 | 1.1 | 2026-10-27 | Shashidhar Pawadashetti | Post-M0 audit revision: verified foundation baseline `5e1c47e`, resolved `Intallo` canonical remote, evaluated Options A & B, established server-side mediation model, defined dual-client separation, modern `SUPABASE_SECRET_KEY` convention, atomic financial RPC specifications, search_path protections, and migration artifact status for commit `d768254`. |
+| 1.2 | 2026-10-28 | Shashidhar Pawadashetti | Integrated formal Supabase API Key Policy and Atomic Financial Operations specification (empty search_path, schema-qualified objects, SECURITY INVOKER default, and legacy key retirement plan). |
 
 ### 6.2 Gating Approvals Required to Close M1
 This architecture record remains in **`Proposed / Pending Approval`** status until the following formal approvals are provided:
