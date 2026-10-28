@@ -2,7 +2,7 @@
 
 - **Status:** Proposed / Pending Approval
 - **Date Created:** 2026-10-26
-- **Date Revised:** 2026-10-28 (Post-M0 Audit, Supabase API Key Policy & Atomic Financial Operations Finalization)
+- **Date Revised:** 2026-10-28 (Post-M0 Audit, Security Review & Access Path Hardening)
 - **Document Code:** M1.1 — Architecture Decision Record
 - **Task Owner:** Shashidhar Pawadashetti (Project Lead & Architecture Owner)
 - **Approvers:** 
@@ -16,11 +16,11 @@
 
 ### 1.1 Verified Repository Identity & Baseline State
 The strictly read-only repository audit established the following facts:
-- **Active Task Branch:** `task/m1-1-adr-policies` (branched from canonical `main` at `aed64f5efc2d0781ab12d3a9fdc0cdd0d269c7fc`).
+- **Active Task Branch:** `fix/m1-1-adr-security-review` (branched from canonical `main` at `f67bc97a1d622231e482359b74adc7c2dcefe1d4`).
 - **Protected Foundation Baseline:** Commit `5e1c47e0d85d5dbe54d84b1f3d31b87622e2f3ca` (initial database schema and synthetic demo baseline). This commit represents the foundational database contract and must be preserved without destructive reset or overwrite.
 - **Migration Artifact Status (Commit `d768254`):** Commit `d768254` introduced migration file `supabase/migrations/20261022090000_harden_financial_integrity.sql` and test script `supabase/tests/integrity_tests.sql`. This file is an in-tree **migration artifact**; it must **not** be assumed to have been applied to the retained remote database (`fjrfyzamiirqzitdchkz`). Verifying remote migration status belongs to a future dedicated comparison task.
 - **Canonical Remote Repository:** `https://github.com/Intallo/Admission-Fee-Management-Portal.git`.
-  - *Discrepancy Resolution:* Commit `6cd7998` merged PR #1 from personal fork `Shashidhar-Pawadashetti/task/m0-3-environment-safety`. Early task isolation used the personal fork, whereas the canonical organization repository is `Intallo/Admission-Fee-Management-Portal`, where PRs #2, #3, #4, #5, and remote `origin` reside. Repository history will not be rewritten; all future PRs and documentation reference the canonical `Intallo` organization.
+  - *Discrepancy Resolution:* Commit `6cd7998` merged PR #1 from personal fork `Shashidhar-Pawadashetti/task/m0-3-environment-safety`. Early task isolation used the personal fork, whereas the canonical organization repository is `Intallo/Admission-Fee-Management-Portal`, where PRs #2, #3, #4, #5, #6, and remote `origin` reside. Repository history will not be rewritten; all future PRs and documentation reference the canonical `Intallo` organization.
 - **Observed Source-Tree Status:** The repository contains complete specifications, database migrations, synthetic demo seed (`supabase/seed.sql`), and generated TypeScript schema types ([`src/types/database.types.ts`](../../src/types/database.types.ts)). It contains **zero application manifests (`package.json`), zero lockfiles, zero build configurations, and zero UI/API code**. Application scaffolding has not yet begun.
 
 ### 1.2 Handover and Operational Context
@@ -79,9 +79,9 @@ flowchart TD
     -->|HTTP Request + Session Cookie| NextServer["Next.js Server / Route Handler"]
 
     subgraph ClientSeparation ["Strict Client Separation Boundary"]
-        NextServer --> SSRClient["1. Session & Auth Client (@supabase/ssr)<br>• Uses Supabase publishable key (sb_publishable_...)<br>• Runs in caller's unprivileged user context<br>• Validates session cookie, reads auth.users, extracts auth_user_id"]
+        NextServer --> SSRClient["1. Session & Auth Client (@supabase/ssr)<br>• Uses Supabase publishable key (sb_publishable_...)<br>• Runs in caller's unprivileged user context<br>• Validates session via auth.getClaims() / auth.getUser()"]
         
-        SSRClient --> AuthGuard{"2. Session Valid & Active?<br>staff_members.is_active = true"}
+        SSRClient --> AuthGuard{"2. Identity Valid & Active?<br>Maps auth user ID to staff_members.auth_user_id<br>Verifies staff_members.is_active = true"}
         AuthGuard -->|No / Inactive| Reject["401 Unauthorized / 403 Forbidden"]
         
         AuthGuard -->|Yes| RBACGuard{"3. Role & Scope Guard<br>Permitted by AUTHORIZATION_MATRIX.md<br>academic_year_id active & matched"}
@@ -94,13 +94,22 @@ flowchart TD
 ```
 
 #### Supabase API Key Policy
-- Use the Supabase publishable key for browser-accessible and cookie/session-aware SSR clients.
-- Use `SUPABASE_SECRET_KEY` (`sb_secret_...`) only in trusted backend code where elevated access is specifically required.
-- Never prefix the secret key with `NEXT_PUBLIC_`, expose it to the browser, commit it to source control, or write it to application logs.
-- Keep legacy `anon` and `service_role` keys only where temporary compatibility requires them, with a migration and retirement plan.
-- Treat the secret key as a credential that bypasses Row Level Security (RLS). Every operation using elevated access must pass server-side authentication, role authorization, record-scope validation, and business-rule checks.
-- Keep the cookie/session-aware SSR client separate from the privileged server client.
-- Never assume RLS protects an operation performed with the secret key. Use RLS as defense in depth for clients operating under user-scoped credentials.
+- **Publishable Key Scope:** Use the Supabase publishable key for browser-accessible assets and cookie/session-aware SSR clients (`@supabase/ssr`).
+- **Secret Key Scope:** Use `SUPABASE_SECRET_KEY` (`sb_secret_...`) only in trusted backend code where elevated access is specifically required.
+- **Zero Leakage Invariant:** Never prefix the secret key with `NEXT_PUBLIC_`, expose it to the browser, commit it to source control, or write it to application logs.
+- **Legacy Key Migration Plan:** Keep legacy `anon` and `service_role` keys only where temporary compatibility requires them, with a planned migration and retirement path.
+- **RLS-Bypass Implications:** Treat the secret key as a credential that bypasses Row Level Security (RLS). Every operation using elevated access must pass server-side authentication, role authorization, record-scope validation, and business-rule checks.
+- **Client Separation:** Keep the cookie/session-aware SSR client strictly separate from the privileged server client.
+- **Defense in Depth:** Never assume RLS protects an operation performed with the secret key. Use RLS as defense in depth for clients operating under user-scoped credentials.
+
+#### Server-Side Identity Validation & Account Verification
+- **Validation Flow:** The server validates caller identity strictly through the official Supabase Auth server-side flow:
+  - Uses `supabase.auth.getClaims()` for fast, cryptographically validated JWT session claims.
+  - Uses `supabase.auth.getUser()` whenever a fresh, authoritative user record must be fetched directly from the Supabase Auth server.
+- **Publishable Key Client Restriction:** The cookie/session-aware `@supabase/ssr` client runs with unprivileged publishable credentials and **does not and cannot directly read the protected `auth.users` database table**.
+- **Trusted Identity Mapping:** The application maps the validated Auth user ID (`user.id`) to `public.staff_members.auth_user_id` exclusively through a trusted server-side query path.
+- **Zero Browser Trust:** Browser-supplied `user_id`, `role`, `staff_id`, or `academic_year_id` query parameters or headers are treated as completely untrusted input. The server resolves and enforces identity, role, and active status exclusively from the validated session claims and database records.
+- **Account Verification:** The server verifies that `staff_members.is_active = true`, checks role permissions against `AUTHORIZATION_MATRIX.md`, verifies the target `academic_year_id` scope, and enforces operation-specific business rules before granting access to protected data.
 
 ### 3.3 Security, Scoping & Governance Controls
 - **Authentication & Identity Linkage:** Authenticate staff email/password via Supabase Auth. The server maps `auth.users.id` -> `public.staff_members.auth_user_id`.
@@ -134,9 +143,16 @@ flowchart TD
 
 ### 4.2 Atomic Financial Operations
 
-The payment-recording operation must be implemented as one transactional PostgreSQL RPC/stored function or one server-managed direct PostgreSQL transaction.
+The payment-recording operation must be implemented as **one transactional PostgreSQL RPC/stored function** or **one server-managed direct PostgreSQL transaction**.
 
-The transaction must cover the payment record, fee allocations, receipt-number allocation, required receipt snapshot, and audit event. It must validate the applicable business rules, prevent duplicate submissions, and handle concurrent allocation safely. Failure at any stage must roll back the entire operation.
+The transaction must cover:
+1. The payment record (`public.payments`).
+2. Fee allocations across assessed fee heads (`public.payment_allocations`).
+3. Sequential receipt-number allocation (`public.issue_receipt_number`).
+4. Required receipt snapshot persistence (`public.receipts.rendered_snapshot`).
+5. Audit event persistence (`public.audit_logs`).
+
+It must validate all applicable business rules, prevent duplicate submissions, and handle concurrent allocation safely. Failure at any stage must roll back the entire operation.
 
 Separate Supabase REST requests must not be treated as one transaction.
 
@@ -160,7 +176,7 @@ sequenceDiagram
         RPC->>DB: 2. INSERT INTO public.payment_allocations (...) [Validate head dues & category]
         RPC->>DB: 3. CALL public.issue_receipt_number('RCT') [Atomic row-lock increment]
         RPC->>DB: 4. INSERT INTO public.receipts (...) [Store rendered_snapshot JSONB]
-        RPC->>DB: 5. INSERT INTO public.audit_logs (...) [Audit entry]
+        RPC->>DB: 5. INSERT INTO public.audit_logs (...) [Audit entry with initiating actor]
         RPC-->>DB: COMMIT TRANSACTION
     end
     
@@ -171,18 +187,40 @@ sequenceDiagram
 
 #### Function Architecture & Security Constraints
 - **Execution Model:** Database functions should use `SECURITY INVOKER` by default.
-- **Security Definer Justification & Requirements:** If `SECURITY DEFINER` is justified (e.g., to sequence row-level locks on counters across callers), its implementation must use:
+- **SECURITY DEFINER Rationale & Privilege Boundary:** `SECURITY INVOKER` is preferred. `SECURITY DEFINER` may be considered only when executing with narrowly controlled owner privileges is strictly necessary for the chosen design. **Transactional consistency, row-level locking, or receipt numbering alone is not sufficient justification.**
+- **Hardened SECURITY DEFINER Requirements:** Where `SECURITY DEFINER` is justified, its implementation must strictly enforce:
   - An **empty `search_path`** (`SET search_path = ''` in function definition) to prevent schema-hijacking attacks.
-  - **Schema-qualified object references** across all SQL statements (e.g., `public.payments`, `public.payment_allocations`, `public.receipt_number_counters`, `public.receipts`, `public.audit_logs`).
-  - **Narrowly granted EXECUTE permissions:**
-    ```sql
-    REVOKE ALL ON FUNCTION public.record_payment_and_issue_receipt(...) FROM PUBLIC;
-    REVOKE ALL ON FUNCTION public.record_payment_and_issue_receipt(...) FROM anon;
-    REVOKE ALL ON FUNCTION public.record_payment_and_issue_receipt(...) FROM authenticated;
-    GRANT EXECUTE ON FUNCTION public.record_payment_and_issue_receipt(...) TO service_role;
-    ```
-  - **Appropriate ownership:** Function owned by `postgres` (or trusted database administrator).
-  - **Explicit authorization checks:** Server-side verification of caller identity and role before invocation, and parameter verification within the function.
+  - **Fully schema-qualified object references** across all SQL statements (e.g., `public.payments`, `public.payment_allocations`, `public.receipt_number_counters`, `public.receipts`, `public.audit_logs`).
+  - **Narrowly scoped `EXECUTE` grants.**
+  - **Explicit authorization and parameter checks** within the function body.
+  - **Least-Privileged Function Owner:** Do not mandate ownership by `postgres` by default. Use a dedicated least-privileged `NOLOGIN` owner (e.g. `school_app_definer`) when practical, or document why platform constraints (such as managed cloud Supabase restrictions) require an alternative owner.
+- **Trust Boundary:** The application server acts as the primary gatekeeper validating authenticated caller identity, permissions, and business policy. The database function represents an internal transactional boundary that must never trust unvalidated client input.
+
+#### Conditional Function Permissions by Selected Access Path
+The permissions model must match the selected architecture path:
+
+1. **For the Supabase RPC Approach:**
+   - Grant execution privileges strictly to the intended server-side database role.
+   - A `service_role` grant is appropriate **only** when the selected invocation path uses that role and is protected by server-side authorization.
+   - Revoke default execution privileges for `PUBLIC`, `anon`, and `authenticated`:
+     ```sql
+     REVOKE ALL ON FUNCTION public.record_payment_and_issue_receipt(...) FROM PUBLIC, anon, authenticated;
+     GRANT EXECUTE ON FUNCTION public.record_payment_and_issue_receipt(...) TO service_role; -- only if invoked via service_role
+     ```
+   - Review helper functions, including `public.issue_receipt_number()` and sequence counters, so they do not expose unnecessary execution privileges to unauthorized roles.
+
+2. **For the Direct PostgreSQL Transaction Approach:**
+   - Specify a dedicated database connection role with the minimum permissions required (e.g., `INSERT` on `public.payments`, `public.payment_allocations`, `public.receipts`, `public.audit_logs`; `SELECT/UPDATE` on `public.receipt_number_counters`; zero DDL or superuser rights).
+   - Do **not** assume that `service_role` is automatically the caller.
+   - Document how actor identity, authorization, transaction integrity, and audit attribution are preserved:
+     - The application server explicitly injects the validated `actor_staff_id` into the transaction payload.
+     - Transaction integrity is enforced via native PostgreSQL `BEGIN ... COMMIT / ROLLBACK` blocks.
+
+3. **Common Attribution & Consistency Invariants (Both Approaches):**
+   - Validate the actual initiating staff actor and permissions in trusted application code.
+   - Do not trust role or identity values supplied directly by the browser.
+   - Ensure audit events identify the initiating actor (`actor_staff_id`) rather than merely recording a technical database role (such as `service_role` or `postgres`).
+   - Preserve the invariant that payment creation, fee allocation, receipt numbering, receipt snapshot persistence, and audit creation commit or roll back together.
 
 #### Milestone and Boundary Invariant
 This ADR records the intended architecture only. Financial function implementation, migrations, and database permission changes belong to their scheduled implementation milestone (Milestone M5.2) and require the applicable approval. No retained database changes are permitted during M1.1.
@@ -202,10 +240,16 @@ Before any pull request is merged, the following automated negative verification
    - Attempt payment allocation exceeding remaining head balance -> must reject (`validate_payment_allocation`).
    - Attempt multi-category allocation within a single payment -> must reject (`enforce_single_category_per_payment`).
    - Attempt payment insertion where allocation sum != payment amount -> must reject (`assert_payment_allocation_sum`).
-2. **Access Control Negative Tests:**
-   - Attempt admission approval by non-Principal (e.g. Clerk or SYSADMIN) -> must return `403 Forbidden`.
-   - Attempt fee concession creation without Principal approval -> must remain `pending` or reject.
-   - Attempt query for sensitive PII (`student_sensitive_details`) by Accountant -> must return `403 Forbidden` / omitted fields.
+2. **Access Control Negative Tests (Acceptance Criteria):**
+   - **Unauthenticated Requests:** Request without session cookie -> must return `401 Unauthorized`.
+   - **Inactive User Accounts:** Request from user with valid Supabase Auth session but `staff_members.is_active = false` -> must return `403 Forbidden`.
+   - **Unauthorized Role Actions:**
+     - Clerk or Admission Officer attempting admission approval -> must return `403 Forbidden`.
+     - Accountant attempting fee concession creation -> must return `403 Forbidden`.
+     - SYSADMIN attempting admission approval, fee waiver, payment recording, certificate issuance, or PII inspection -> must return `403 Forbidden`.
+   - **Cross-Year Mutating Access:** Attempt write operation targeting closed academic year (`academic_years.status = 'closed'`) -> must return `422 Unprocessable Entity`.
+   - **Forged Browser-Supplied Roles / IDs:** Request providing modified `role`, `staff_id`, or `user_id` in headers/body -> server ignores client-supplied values and derives identity exclusively from validated session claims -> unauthorized operation returns `403 Forbidden`.
+   - **Privileged Operation Invocation Without Permission:** Direct attempt to invoke internal API routes or RPCs without required role/scope -> rejected and logged as security violation.
 3. **Data Immutability Tests:**
    - Attempt `DELETE` on any of the 21 protected tables -> must throw PostgreSQL hard-delete rejection.
    - Attempt `UPDATE` on committed `payments`, `payment_allocations`, or `receipts.rendered_snapshot` -> must reject.
@@ -225,6 +269,7 @@ Before any pull request is merged, the following automated negative verification
 | 1.0 | 2026-10-26 | Shashidhar Pawadashetti | Initial architectural proposal and evaluation criteria. |
 | 1.1 | 2026-10-27 | Shashidhar Pawadashetti | Post-M0 audit revision: verified foundation baseline `5e1c47e`, resolved `Intallo` canonical remote, evaluated Options A & B, established server-side mediation model, defined dual-client separation, modern `SUPABASE_SECRET_KEY` convention, atomic financial RPC specifications, search_path protections, and migration artifact status for commit `d768254`. |
 | 1.2 | 2026-10-28 | Shashidhar Pawadashetti | Integrated formal Supabase API Key Policy and Atomic Financial Operations specification (empty search_path, schema-qualified objects, SECURITY INVOKER default, and legacy key retirement plan). |
+| 1.3 | 2026-10-28 | Shashidhar Pawadashetti | Security review refinement: corrected SSR client identity validation (auth.getClaims / auth.getUser vs auth.users direct read), hardened SECURITY DEFINER rationale (disallowing lock/sequence justification, requiring dedicated least-privileged owner, search_path = ''), structured conditional permissions for RPC vs direct PostgreSQL transaction access paths, clarified actor audit attribution, and expanded negative authorization test criteria. |
 
 ### 6.2 Gating Approvals Required to Close M1
 This architecture record remains in **`Proposed / Pending Approval`** status until the following formal approvals are provided:
