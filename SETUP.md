@@ -1,92 +1,133 @@
-# Setup and Handover Guide
+# Developer Setup and Runbook
 
-> **Baseline Status (M0.3 Audited):** This guide reflects direct inspection of repository manifests, local tooling, configuration files, and SQL test scripts. Commands and dependencies are separated into mandatory baseline vs optional tooling.
+> **Current Baseline:** Phase 7 — Final Security Hardening, Verification & Handover Baseline  
+> **Framework:** Next.js 14 App Router, TypeScript 5.6.3, Tailwind CSS, Vitest 2.1.9, Supabase / PostgreSQL 15+  
+> **Security Baseline:** US-33 AC2 Database Privilege Isolation & Server-Only Database Adapters  
+> **Comprehensive Guide:** See [docs/DEVELOPER_SETUP_AND_TROUBLESHOOTING.md](docs/DEVELOPER_SETUP_AND_TROUBLESHOOTING.md) for full operational runbooks and troubleshooting.
 
 ---
 
 ## 1. Responsibility Boundary
-- **Intallo:** Delivers source code, database scripts, synthetic seed, setup guide, technical notes, and acceptance evidence.
-- **Client:** Owns deployment/hosting, domain/DNS, live HTTPS/TLS, production database operations, backup/restore schedules, monitoring, end-user training, and ongoing maintenance per signed engagement terms.
+
+- **Vendor (Intallo):** Delivers verified application source code, database migrations, synthetic demo seed data, setup and troubleshooting guides, test suites, and client handover package.
+- **Client (ABC English Medium School):** Owns deployment, hosting infrastructure, domain/DNS routing, SSL/TLS certificates, live database operations, automated backup schedules, disaster recovery, end-user management, and ongoing software operations per signed engagement terms (BRD §13, SRS §1.3, DEC-09).
 
 ---
 
-## 2. Verified Tooling & Runtime Inventory
+## 2. Prerequisites
 
-Direct execution on the development host verified the following tool inventory:
+Before setting up the project, ensure the following runtimes and tools are installed:
 
-| Tool / Runtime | Verified Version | Status | Architectural Role | Mandatory / Optional |
-|---|---|:---:|---|:---:|
-| **Node.js** | `v24.12.0` | **Installed** | Application runtime for Next.js / React frontend shell | Mandatory for app runtime |
-| **npm** | `11.6.2` | **Installed** | Node package manager for installing frontend packages | Mandatory for app dependencies |
-| **Git** | `2.48.1.windows.1` | **Installed** | Version control and task-branch workflow | Mandatory |
-| **Docker Desktop** | `29.8.2 (build 7fc2dff)` | **Installed** | Local container engine required to run the local Supabase stack | Mandatory for local DB stack |
-| **Python** | `3.14.2` | **Installed** | Host scripting / build utility | Optional helper |
-| **Supabase CLI** | *Not Found on PATH* | **BLOCKER** | CLI for `supabase start`, `supabase migration`, `supabase gen types` | **Mandatory local prerequisite** |
-| **Application Manifest** | `package.json` *Not Present* | **PENDING** | Node project configuration, dependencies, and build scripts | Pending Milestone M1.1 ADR |
+- **Node.js:** `v20.x` or `v24.x` (verified with `v24.12.0`)
+- **npm:** `v10.x` or `v11.x` (verified with `11.6.2`)
+- **Git:** `2.40+`
+- **Docker Desktop:** Required for running the disposable local PostgreSQL and Supabase services.
+- **Supabase CLI:** (Optional for frontend-only build; required for local migrations: `npm install -g supabase` or `winget install Supabase.CLI`).
 
 ---
 
-## 3. Baseline Verification (Read-Only)
-- Current baseline commit: `5e1c47e` (Initial Supabase database schema and seed data).
-- Hardening migration commit: `d768254` (`20261022090000_harden_financial_integrity.sql` and `supabase/tests/integrity_tests.sql`).
-- Remote Supabase project reference: `fjrfyzamiirqzitdchkz` (`https://supabase.com/dashboard/project/fjrfyzamiirqzitdchkz`).
-- Retained database state: Schema and synthetic demonstration data were applied to the hosted project prior to baseline repository creation. M0.3 inspection is strictly read-only.
+## 2. Quickstart & Installation
+
+### Step 1: Clone and Enter Repository
+```bash
+git clone https://github.com/Intallo/Admission-Fee-Management-Portal.git
+cd Admission-Fee-Management-Portal
+```
+
+### Step 2: Configure Local Environment
+Copy the safe template to `.env.local`:
+```bash
+cp .env.example .env.local
+```
+Review the `.env.local` settings:
+- `NEXT_PUBLIC_SUPABASE_URL`: Defaults to `http://127.0.0.1:54321` (Local Supabase).
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`: Default local publishable key.
+- `SUPABASE_SERVICE_ROLE_KEY`: Service key for trusted server-side execution.
+- `ALLOW_REMOTE_DATABASE`: Kept at `false` to guard against accidental connection to remote instances.
+
+> [!CAUTION]
+> **RETAINED REMOTE DATABASE GUARD:**  
+> Connecting to the retained remote database (`fjrfyzamiirqzitdchkz`) during development or automated tests is **strictly prohibited**. The runtime environment validator (`src/lib/env.ts`) and database adapters (`src/infrastructure/db/guards.ts`) will fail-closed and abort immediately if any remote database URL is detected.
+
+### Step 3: Install Dependencies
+```bash
+npm install
+```
+This generates `package-lock.json` and installs all approved dependencies.
 
 ---
 
-## 4. Environment Variables Register
-Tracked configuration keys are fully documented in [`ENVIRONMENT_VARIABLES.md`](ENVIRONMENT_VARIABLES.md).
-- **Public Client Keys:** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (Safe for browser bundle).
-- **Protected Server Secrets:** `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL` (**CRITICAL SECRETS**; never expose to browser or commit to git).
-- Keep [`.env.example`](.env.example) placeholder-only.
-- All real environment files (`.env`, `.env.local`) are ignored via [`.gitignore`](.gitignore).
+## 3. Developer Commands
+
+| Command | Purpose |
+|---|---|
+| `npm run dev` | Starts the Next.js development server at `http://localhost:3000` |
+| `npm run build` | Compiles a production-ready Next.js application with strict type and bundle checks |
+| `npm run start` | Serves the production build |
+| `npm run typecheck` | Executes `tsc --noEmit` to validate all TypeScript types |
+| `npm run lint` | Runs Next.js ESLint checks |
+| `npm test` | Runs all Vitest unit tests |
+| `npm run test:watch` | Runs Vitest in interactive watch mode |
 
 ---
 
-## 5. Verification Script Safety Review
+## 4. Disposable Local Database Workflow
 
-The repository contains two SQL test scripts under `supabase/tests/`. Their safety profiles are evaluated below:
+All development and test executions must use a disposable local PostgreSQL container:
 
-### 1. `supabase/tests/verification.sql` (Read-Only Verification Script)
-- **Behavior:** Executes a single `SELECT jsonb_build_object(...)` statement querying table metadata and record aggregates.
-- **Checks Performed:**
-  - Table count: `information_schema.tables` where `table_schema = 'public'`.
-  - RLS verification: `bool_and(c.relrowsecurity)` across all public relation tables.
-  - Record counts: `students`, `guardians`, `admission_applications`, `payments`, `payment_allocations`, `receipts`, `consolidated_receipts`, `student_year_certificates`.
-  - Financial consistency: Confirms payment amount equals allocation sums; checks cross-student allocation boundaries; checks consolidated receipt amount totals.
-- **Database Writes:** **ZERO.** Does not contain `INSERT`, `UPDATE`, `DELETE`, `DROP`, `TRUNCATE`, `ALTER`, or `CREATE`.
-- **Safety Classification:** **SAFE** to run against any database, including the retained shared database.
+### Starting Local Supabase Stack
+```bash
+supabase start
+```
+This initializes local PostgreSQL 17 on `127.0.0.1:54322`, Auth and REST on `127.0.0.1:54321`, and Studio on `http://127.0.0.1:54323`.
 
-### 2. `supabase/tests/integrity_tests.sql` (Constraint & Negative Test Script)
-- **Behavior:** Defines temporary PL/pgSQL functions (`pg_temp.expect_reject`) to test boundary constraints (e.g. overpayment, cross-category payment, unauthorized adjustment, and invalid reversals).
-- **Database Writes:** Executes speculative DML write statements inside `BEGIN ... EXCEPTION ... ROLLBACK` blocks.
-- **Safety Classification:** **RESTRICTED.** Must **NEVER** be run against the retained shared database. Run strictly against a disposable local Docker database.
+### Applying Migrations and Seed
+```bash
+supabase db reset
+```
+This applies all migrations up through `20261030000000_provision_restricted_app_role.sql` and populates synthetic demonstration data from `supabase/seed.sql`.
 
----
-
-## 6. Commands & Safe Execution Runbook
-
-| Lifecycle Action | Safe Command | Target Environment | Safety Notes |
-|---|---|---|---|
-| **Check Tooling** | `node -v; npm -v; git --version; docker --version` | Local Host | Completely non-destructive. |
-| **Install Supabase CLI** | `npm install -g supabase` *or* `winget install Supabase.CLI` | Local Host | Required to resolve the local environment blocker. |
-| **Start Local Stack** | `supabase start` | Local Docker | Starts local PostgreSQL 17, PostgREST, Auth, Storage, and Studio. |
-| **Disposable Reset** | `supabase db reset` | **LOCAL DOCKER ONLY** | **DESTRUCTIVE.** Runs all migrations and loads `seed.sql`. **NEVER** run against remote/retained DB. |
-| **Check Local Migrations** | `supabase migration list --local` | Local Workspace | Inspects migration timestamps without executing SQL. |
-| **Generate TS Types** | `supabase gen types typescript --local > src/types/database.types.ts` | Local Workspace | Generates type definitions from local schema. |
-| **Run Safe Verification** | `psql <connection-string> -f supabase/tests/verification.sql` | Any / Retained DB | Read-only JSON validation report. |
-| **Run Negative Tests** | `psql <local-connection-string> -f supabase/tests/integrity_tests.sql` | **LOCAL DISPOSABLE ONLY** | Tests rejection triggers; rolls back all operations. |
+### Verifying US-33 AC2 Least Privilege
+The migration `20261030000000_provision_restricted_app_role.sql` provisions the `school_app_user` role with zero `DELETE` privileges across core tables and zero `UPDATE` privileges on the ledger. Run the SQL verification suite to assert rejection of unauthorized mutations:
+```bash
+psql postgresql://postgres:postgres@127.0.0.1:54322/postgres -f supabase/tests/integrity_tests.sql
+```
 
 ---
 
-## 7. Known Environment Blockers & Missing Prerequisites
+## 5. Architectural Boundaries & Conventions
 
-1. **Supabase CLI Not on PATH:**
-   - **Impact:** Cannot execute `supabase start`, `supabase db reset`, or regenerate TypeScript database types locally.
-   - **Remediation:** Install Supabase CLI via `npm install -g supabase` or Scoop/Homebrew/Winget.
-2. **Missing Application Manifest (`package.json`):**
-   - **Impact:** Frontend/backend application code cannot be installed, built, or tested locally yet.
-   - **Remediation:** Expected at this stage; milestone M1.1 (Architecture ADR) must first evaluate and approve the application framework and module scaffolding.
-3. **Docker Desktop Configuration Access Warning:**
-   - **Impact:** Docker version 29.8.2 is installed, but CLI warned `open C:\Users\shash\.docker\config.json: Access is denied`.
-   - **Remediation:** Ensure Docker Desktop is launched with appropriate user privileges before starting the local Supabase container stack.
+1. **Server-Only Database Adapters:**
+   - Database operations that use `SUPABASE_SERVICE_ROLE_KEY` are contained in `src/infrastructure/db/supabase-admin.ts` and marked with `import 'server-only'`.
+   - Never import server-only database adapters or service keys into client components.
+2. **Exact Decimal Monetary Arithmetic:**
+   - Never use JavaScript `Number` or floating-point operators for financial math.
+   - Always use `src/lib/money/inr.ts` (`addInr`, `subtractInr`, `multiplyInr`, `formatInr`, `amountInWordsInr`).
+3. **Structured Logging and Secret Redaction:**
+   - Use `logger.info`, `logger.warn`, `logger.error` from `src/lib/logger.ts`.
+   - Sensitive fields (Aadhaar, passwords, JWT tokens, bank accounts, connection strings) are automatically redacted.
+4. **RFC 7807 Standard Errors:**
+   - API endpoints catch errors and format them using `formatErrorResponse` (`src/lib/errors.ts`), returning standardized problem details envelopes with correlation IDs.
+
+---
+
+## 6. Troubleshooting Common Issues
+
+### Issue 1: `[DATABASE SAFETY GUARD] Connection to retained remote database ... is STRICTLY FORBIDDEN`
+- **Cause:** Your `.env.local` or environment contains `NEXT_PUBLIC_SUPABASE_URL` or `DATABASE_URL` pointing to `fjrfyzamiirqzitdchkz` or a non-local host.
+- **Fix:** Update `.env.local` to use `http://127.0.0.1:54321` and ensure `ALLOW_REMOTE_DATABASE=false`.
+
+### Issue 2: `[SECURITY VIOLATION] Attempted to access server environment variables from client bundle`
+- **Cause:** A Client Component (`'use client'`) attempted to import `getServerEnv()` or a server-only adapter.
+- **Fix:** Move database queries and sensitive operations into Server Components, Route Handlers (`src/app/api/...`), or Server Actions. In client components, use `createBrowserDbClient()`.
+
+### Issue 3: EPERM or Permission Denied on `node_modules` during `npm install` on Windows
+- **Cause:** Windows file locking by IDE or Antivirus.
+- **Fix:** Close active development servers or file watchers, delete `node_modules/.cache`, and retry `npm install`.
+
+### Issue 4: Next.js Port 3000 in Use
+- **Cause:** Another process is bound to port 3000.
+- **Fix:** Run `npm run dev -- -p 3001` or terminate the lingering Node process via PowerShell:
+  ```powershell
+  Get-Process node | Stop-Process -Force
+  ```

@@ -1,11 +1,11 @@
-# Consolidated Decision & Risk Register (Milestone M0.5)
+# Consolidated Decision & Risk Register (Milestone M0.5 — Finalized in Phase 7)
 
 **Document Code:** M0.5 — Decision & Risk Register  
 **Task Owner:** Shashidhar (Project Lead & Architecture Owner)  
-**Reviewer:** Unassigned — solo-owner mode; self-review is not independent peer approval.
-**Document Status:** Canonical Register (In Review)  
+**Document Status:** **Finalized & Superseded by Phase 7 Handover Register** ([docs/KNOWN_LIMITATIONS_AND_RISK_REGISTER.md](KNOWN_LIMITATIONS_AND_RISK_REGISTER.md))  
 **Baseline Reference:** Signed BRD v1.4, Signed SRS v1.4, Baseline Commit `5e1c47e`, M0.4 Database Schema Inventory  
-**Database Safety Impact:** **Strictly Read-Only** — zero database writes, resets, migrations, or data mutations performed.  
+**Verification Date:** 29 October 2026 (Phase 7 Final Handover)  
+**Database Safety Impact:** **Strictly Read-Only** — zero database writes, resets, migrations, or data mutations performed against retained database.  
 
 ---
 
@@ -81,7 +81,7 @@ The table below enumerates all known open business decisions, technical dependen
 | ID | Title & Category | Status | Affected Scope | Req Milestone | Owner & Approver | Core Ambiguity / Risk | Recommended Pathway | Next Action & Target Evidence |
 |---|---|:---:|:---:|:---:|---|---|---|---|
 | **REG-01** | **Principal vs. SYSADMIN Authority Boundary**<br>`Security / Governance` | **Proposed — Gating M0 Exit** | `identity-access`, M3.1, M3.2 | **M0 Exit / M3.1** | **Owner:** Shashidhar<br>**Approver:** Client / Principal | Ambiguity over technical SYSADMIN vs. institutional Principal authority. | Enforce zero financial, admission, and student data override rights for SYSADMIN. SYSADMIN restricted to account provisioning and system health. | Adopt §2 Governance Matrix in M3.1 Role Spec; self-checked by Shashidhar with automated tests (no independent peer review). |
-| **REG-02** | **100-Seat Capacity Scope & Enforcement**<br>`Unresolved Business Rule` | **Open — Escalated** | `admissions`, US-42, BR-38 | **M4.2** | **Owner:** Shashidhar<br>**Approver:** Client / Principal | SRS §3 A-08 notes 100 seats per section (Pre-primary, Primary, High School). Unclear if cap is per section, per grade, or across group. | Configure capacity on `sections.max_capacity` (default 40 per class) with group-level cap in school settings; block approval in app layer. | Obtain Client written confirmation on capacity granularity before M4.2 implementation. |
+| **REG-02** | **100-Seat Capacity Scope & Enforcement**<br>`Business Rule Implementation` | **Resolved (Configurable Policy)** | `admissions`, US-42, BR-38 | **Phase 4 / M4.2** | **Owner:** Shashidhar<br>**Approver:** Client / Principal | SRS §3 A-08 notes 100 seats per section across division groups (Pre-primary, Primary, High School), whereas the physical schema specifies `sections.max_capacity` (default 40 per class). | Dual Enforcement Policy: Both section-level physical cap (`sections.max_capacity`) and institutional division-group cap (100 seats) are enforced concurrently via `CapacityPolicyConfig` (`dual_enforcement`). Configurable to `section_only` or `division_group_only` without code changes. | Implemented in `AdmissionsService` with atomic mutex lock and explicit error diagnostics; verified via concurrency and capacity tests (`tests/admissions_concurrency_capacity.test.ts`). |
 | **REG-03** | **LC/TC Issuance with Unpaid Dues**<br>`Unresolved Business Rule` | **Working Assumption** | `certificates-lctc`, US-31, US-35 | **M6.3** | **Owner:** Shashidhar<br>**Approver:** Client / Principal | SRS §3 A-13: Can a Transfer Certificate be issued if student has outstanding fee dues? | Permitted with explicit Principal override and mandatory recorded justification; flag unpaid balance on review screen. | Submit approval dialog UX to Principal; confirm whether hard-block or override is required. |
 | **REG-04** | **Admission Fee Refund & Reversal Policy**<br>`Unresolved Business Rule` | **Working Assumption** | `fees-ledger`, US-26A, BR-22 | **M5.4** | **Owner:** Shashidhar<br>**Approver:** Client / Principal | SRS §3 A-06, BRD §16.2: Is Admission Fee strictly non-refundable, or can Principal approve refunds? | Treat Admission Fee as refundable only via Principal-approved reversal adjustment; zero physical deletion. | Draft financial reversal policy; confirm refund authority with Principal in M5.4. |
 | **REG-05** | **Administrative Authority for Fee Setup**<br>`Unresolved Business Rule` | **Working Assumption** | `fee-configuration`, US-17, US-18 | **M5.1** | **Owner:** Shashidhar<br>**Approver:** Client / Principal | SRS §3 A-23: Who is the "Admin" that configures fee heads, places, and amounts? | Two-person rule: Accounts Officer (`ACC`) drafts fee heads/tariffs; Principal formally approves before release. | Encode workflow in M5.1 API contract: `created_by` (ACC) and `approved_by` (Principal). |
