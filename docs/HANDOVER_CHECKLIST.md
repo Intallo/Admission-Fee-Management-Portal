@@ -28,17 +28,17 @@ In accordance with signed BRD v1.4 Section 6.3, signed SRS v1.4 Section 1.3, and
 - [x] **Zero Leaked Secrets in Repository:** Complete scan of source tree, git history, and build manifests reveals zero committed production passwords, private keys, or API secrets.
 
 ### 2.2 Automated Test Execution & Evidence
-- [x] **100% Test Pass Rate:** Vitest test suite executes 26 test files with 219 total tests; **219 passed, 0 failed, 0 skipped**.
+- [x] **100% Test Pass Rate (In-Memory Tier):** Vitest test suite executes 26 test files with 219 total tests; **219 passed, 0 failed, 0 skipped** across domain rules, Zod schemas, RBAC guards, and PII masking.
 - [x] **Full Security Test Suite:** Dedicated [`tests/security_verification.test.ts`](file:///tests/security_verification.test.ts) (23 tests) passes with 100% success.
-- [x] **Database Constraint & Integrity Tests:** SQL test suites (`integrity_tests.sql`, `verification.sql`, `us33_ac2_least_privilege_tests.sql`) pass 100% of assertion checks against PostgreSQL engine.
+- [x] **Database Constraint & Integrity Tests (PostgreSQL Tier):** SQL test suites (`integrity_tests.sql`, `verification.sql`, `us33_ac2_least_privilege_tests.sql`) pass 100% of assertion checks against PostgreSQL engine via `psql`.
 
 ### 2.3 Security Hardening & Isolation
 - [x] **Unauthenticated & Inactive Request Blocking:** Requests without a valid session token receive `401 Unauthorized`; requests from deactivated accounts receive `403 Forbidden`.
 - [x] **Role Escalation Defense:** Forged roles or actor IDs in request bodies or HTTP headers are rejected; server enforces session role strictly.
 - [x] **PII Protection & DPDP Compliance:** Sensitive demographic data (Aadhaar, income, caste, bank details) is accessible strictly to Principal and Admission Officer; Accounts Officer and System Admin receive masked/redacted views only.
-- [x] **File Upload Security:** Uploads strictly validated for allowed MIME types (PDF, JPG, PNG) and file size (< 5MB); cross-student document access blocked.
+- [x] **File Upload Security & Private Buckets:** Uploads validated for allowed MIME types (PDF, JPG, PNG) and size (< 5MB); migration `20261101000000` provisions 3 private storage buckets with RLS.
 - [x] **Cross-Year Accounting Isolation:** Unpaid arrears are never carried across academic years; dues calculations are strictly scoped to the active year.
-- [x] **Database Least Privilege (US-33 AC2):** Migration `20261030000000` provisions dedicated `school_app_user` with zero `DELETE` privilege across all tables and zero `UPDATE` privilege on ledger and audit tables.
+- [x] **Database Least Privilege Role (US-33 AC2):** Migration `20261030000000` provisions dedicated `school_app_user` in PostgreSQL schema with zero `DELETE` privilege across all tables and zero `UPDATE` privilege on ledger and audit tables (runtime adapter currently connects as `service_role` in dev/test).
 - [x] **Fail-Closed Row Level Security (RLS):** All 32 tables have RLS enabled with zero public access.
 
 ### 2.4 Financial & Domain Correctness
@@ -50,6 +50,7 @@ In accordance with signed BRD v1.4 Section 6.3, signed SRS v1.4 Section 1.3, and
 - [x] **Final Fees Receipt Zero Dues Gate (DEC-04, US-28):** Final receipt issued strictly when net balance is ₹0.00 across all heads.
 - [x] **Transfer Certificate Lifecycle (US-34 - US-37):** Two-step workflow (Step 1 ADM review, Step 2 Principal approval); dues warning with mandatory override; sequential `TC-YYYY-NNNN`; active enrollment preserved upon issuance (DEC-08).
 - [x] **Seat Capacity Enforcement (US-42, REG-02):** Dual enforcement policy atomically checks both section cap and division-group 100-seat cap.
+- [!] **Persistence Bridge Notice (CTO Audit Finding F-01):** Domain services manage state in process-local memory vaults for evaluation; persistent PostgreSQL transaction bridge is required prior to live multi-pod production.
 
 ### 2.5 Complete Documentation Package Handover
 - [x] **Developer Setup & Troubleshooting Guide:** [`docs/DEVELOPER_SETUP_AND_TROUBLESHOOTING.md`](file:///docs/DEVELOPER_SETUP_AND_TROUBLESHOOTING.md) & [`SETUP.md`](file:///SETUP.md).

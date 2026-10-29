@@ -349,8 +349,21 @@ export class DocumentsService {
       // Test environment fallback
     }
 
-    // Generate safe deterministic download URL
-    const downloadUrl = `https://portal-storage.school.local/admission-documents/${doc.storagePath}?token=mock_signed_${randomUUID()}&expires=${Math.floor(Date.now() / 1000) + expiresInSeconds}`;
+    // Generate safe deterministic download URL (fallback / offline)
+    let downloadUrl = `https://portal-storage.school.local/admission-documents/${doc.storagePath}?token=mock_signed_${randomUUID()}&expires=${Math.floor(Date.now() / 1000) + expiresInSeconds}`;
+
+    try {
+      const adminDb = getAdminDbClient();
+      const bucketName = doc.storageBucket || 'admission-documents';
+      const { data: signedData, error: signError } = await adminDb.storage
+        .from(bucketName)
+        .createSignedUrl(doc.storagePath, expiresInSeconds);
+      if (signedData?.signedUrl && !signError) {
+        downloadUrl = signedData.signedUrl;
+      }
+    } catch {
+      // Local/unit-test environment fallback
+    }
 
     return {
       downloadUrl,
