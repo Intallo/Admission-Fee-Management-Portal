@@ -1,31 +1,30 @@
 # ADR-001: Architecture Decision Record — Modular Monolith Framework & Security Design
 
-- **Status:** Proposed / Pending Approval
+- **Status:** Proposed / Formally Reviewed for Phase 1 Lock
 - **Date Created:** 2026-10-26
-- **Date Revised:** 2026-10-28 (Post-M0 Audit, Security Review & Access Path Hardening)
+- **Date Revised:** 2026-10-29 (Phase 1 Architecture Lock, US-33 AC2 Resolution & Atomic Contracts)
 - **Document Code:** M1.1 — Architecture Decision Record
-- **Task Owner:** Shashidhar Pawadashetti (Project Lead & Architecture Owner)
-- **Approvers:** 
+- **Task Owner:** Senior Software Engineer (Implementation Owner)
+- **Approvers Required:** 
   - Technical Architecture: Shashidhar Pawadashetti (Project Lead & Architecture Owner)
   - Business & Operational Governance: Rakesh Aralikatti (Client Signatory / Principal)
-- **Authoritative Baselines:** Signed BRD v1.4, Signed SRS v1.4 (Approved 22 Oct 2026), Protected Foundation Baseline Commit `5e1c47e`, and Read-Only Repository Audit (`repository_audit_and_execution_plan.md`)
+- **Authoritative Baselines:** Signed BRD v1.4, Signed SRS v1.4 (Approved 22 Oct 2026), Baseline Commit `5e1c47e`, and Phase 1 Database Audit (`docs/CTO_DATABASE_AUDIT.md`)
 
 ---
 
 ## 1. Context & Verified Repository Baseline
 
 ### 1.1 Verified Repository Identity & Baseline State
-The strictly read-only repository audit established the following facts:
-- **Active Task Branch:** `fix/m1-1-adr-security-review` (branched from canonical `main` at `f67bc97a1d622231e482359b74adc7c2dcefe1d4`).
+The Phase 1 repository audit established the following facts:
+- **Active Task Branch:** `task-phase1-architecture-audit-contracts` (branched from canonical `main` at `32c51bf`).
 - **Protected Foundation Baseline:** Commit `5e1c47e0d85d5dbe54d84b1f3d31b87622e2f3ca` (initial database schema and synthetic demo baseline). This commit represents the foundational database contract and must be preserved without destructive reset or overwrite.
-- **Migration Artifact Status (Commit `d768254`):** Commit `d768254` introduced migration file `supabase/migrations/20261022090000_harden_financial_integrity.sql` and test script `supabase/tests/integrity_tests.sql`. This file is an in-tree **migration artifact**; it must **not** be assumed to have been applied to the retained remote database (`fjrfyzamiirqzitdchkz`). Verifying remote migration status belongs to a future dedicated comparison task.
+- **Retained Remote Database Reference:** `fjrfyzamiirqzitdchkz`. **Strictly Protected** — zero development migrations, resets, or mutations are permitted against this remote instance. All development and testing execute against disposable local PostgreSQL instances.
 - **Canonical Remote Repository:** `https://github.com/Intallo/Admission-Fee-Management-Portal.git`.
-  - *Discrepancy Resolution:* Commit `6cd7998` merged PR #1 from personal fork `Shashidhar-Pawadashetti/task/m0-3-environment-safety`. Early task isolation used the personal fork, whereas the canonical organization repository is `Intallo/Admission-Fee-Management-Portal`, where PRs #2, #3, #4, #5, #6, and remote `origin` reside. Repository history will not be rewritten; all future PRs and documentation reference the canonical `Intallo` organization.
-- **Observed Source-Tree Status:** The repository contains complete specifications, database migrations, synthetic demo seed (`supabase/seed.sql`), and generated TypeScript schema types ([`src/types/database.types.ts`](../../src/types/database.types.ts)). It contains **zero application manifests (`package.json`), zero lockfiles, zero build configurations, and zero UI/API code**. Application scaffolding has not yet begun.
+- **Observed Source-Tree Status:** The repository contains complete specifications, database migrations, synthetic demo seed (`supabase/seed.sql`), and generated TypeScript schema types (`src/types/database.types.ts`). Application manifests (`package.json`), build configurations, and UI/API code are pending Phase 2 scaffolding.
 
 ### 1.2 Handover and Operational Context
 Under signed BRD §2.1 and SRS §1.3:
-- **Intallo Deliverable:** Strictly verified **project source code and a handover package** (no hosting or live operations).
+- **Intallo Deliverable:** Strictly verified **project source code and a handover package** (no hosting, cloud operations, or live database administration).
 - **Client Ownership:** The Client (Rakesh Aralikatti) and ABC English Medium School operate, host, secure, back up, and maintain the production environment.
 - **Operational Boundary:** The application runtime must remain minimal, robust, easily containerized, and deployable on a single virtual host without complex distributed microservice infrastructure.
 
@@ -35,255 +34,138 @@ Under signed BRD §2.1 and SRS §1.3:
 
 Two primary architecture candidates were evaluated against project constraints:
 
-| Evaluation Dimension | Option A: Next.js + TypeScript Modular Monolith | Option B: React (Vite) SPA + Node.js (Express) Separate Backend |
+| Evaluation Dimension | Option A: Next.js + TypeScript Modular Monolith (Selected) | Option B: React (Vite) SPA + Node.js (Express) Separate Backend |
 |---|---|---|
 | **Deployment Complexity** | **Low.** Single unified application package, single runtime process (`node server.js` or standalone Next.js Docker container), single HTTP port. Ideal for Client source-only handover. | **Medium-High.** Two separate codebases/directories, two runtimes, two build pipelines, requiring reverse-proxy configuration (NGINX/Caddy) to avoid cross-domain complexities. |
 | **Module Boundaries** | **High.** Feature modules (`src/modules/*`) encapsulate UI pages, domain services, data access adapters, and validation schemas behind clean TypeScript interfaces. | **High.** Physical separation between frontend components and backend Express routers, but requires duplicate domain interfaces or shared monorepo packages. |
-| **Type Sharing & Safety** | **Seamless.** Frontend and backend run in a single TypeScript project referencing [`src/types/database.types.ts`](../../src/types/database.types.ts) without monorepo linkers or build steps. | **Moderate.** Requires npm workspace, Turborepo, or symlinking to share database types and DTO definitions between client and server. |
+| **Type Sharing & Safety** | **Seamless.** Frontend and backend run in a single TypeScript project referencing `src/types/database.types.ts` without monorepo linkers or build steps. | **Moderate.** Requires npm workspace, Turborepo, or symlinking to share database types and DTO definitions between client and server. |
 | **Authentication & Session** | **Robust.** Server-side authentication using `@supabase/ssr` with encrypted, HTTP-only cookie sessions. Zero browser token persistence vulnerabilities. | **Moderate.** Requires manual cookie-parsing middleware, JWT verification handlers, CSRF tokens, and refresh token rotation logic in Express. |
 | **API & CORS Surface** | **Zero CORS overhead.** UI and API routes share the exact same origin; zero pre-flight latency or cross-origin security misconfigurations. | **CORS Configuration Required.** Must maintain explicit allowed origins, pre-flight handling, and credentials flags across environments. |
 | **Private Document Handling** | **High Security.** API Route handlers authenticate staff session, verify student/record scope, and stream file or generate short-lived signed URLs. | **High Security.** Express middleware authenticates session and issues presigned Supabase Storage URLs. |
-| **Server-Side PDF Generation** | **Unified.** Generates server-side A4/A5 PDFs via `@react-pdf/renderer` or headless Chrome directly within Route Handlers, streaming buffers to client. | **Unified.** Express endpoints render PDF buffers and stream to client. |
+| **Server-Side PDF Generation** | **Unified.** Generates server-side A4/A5 PDFs via `@react-pdf/renderer` directly within Route Handlers, streaming buffers to client. | **Unified.** Express endpoints render PDF buffers and stream to client. |
 | **Testing Harness** | **Unified Harness.** Single Vitest / Playwright harness covering unit domain logic, API integration routes, and end-to-end browser workflows. | **Fragmented.** Separate test harnesses for Vite (Vitest/Jest) and Express (Supertest/Mocha), plus distinct CI runner jobs. |
 | **Maintainability for School IT** | **High.** Single repository, single `package.json`, single command startup (`npm run build && npm start`), deterministic environment variables. | **Lower.** Multi-process monitoring, multiple dependency graphs, and higher likelihood of version drift between API and client. |
 
-### 2.1 Recommendation
-**Option A (Next.js + TypeScript Modular Monolith)** is explicitly recommended. It fulfills every requirement of signed BRD v1.4 and SRS v1.4 while minimizing operational moving parts for the Client's post-handover team.
-
-*Trade-Offs of Option A:*
-- *Trade-off:* Framework coupling to Next.js App Router conventions.
-- *Mitigation:* Domain business logic, financial arithmetic, and state machines are isolated inside framework-agnostic domain services under `src/modules/*`, leaving Next.js App Router strictly as the HTTP/rendering delivery shell.
+### 2.1 Formal Recommendation
+**Option A (Next.js + TypeScript Modular Monolith)** is formally recommended. It fulfills every requirement of signed BRD v1.4 and SRS v1.4 while minimizing operational moving parts for the Client's post-handover team.
 
 ---
 
-## 3. Database Access, Security & Authorization Specification
+## 3. Database Access Architecture & US-33 AC2 Resolution
 
-### 3.1 Existing Fail-Closed RLS Configuration
-The read-only database inventory ([`docs/DATABASE_SCHEMA_INVENTORY.md`](../DATABASE_SCHEMA_INVENTORY.md)) verified:
-1. **Row-Level Security (RLS) is enabled** across all 31 public tables (`relrowsecurity = true`).
-2. **Fail-Closed Grants:** All privileges on public tables and sequences are explicitly revoked from `public`, `anon`, and `authenticated`.
-3. **Current Policy Count = 0:** There are **zero browser-facing RLS policies (`CREATE POLICY`)** in the schema.
-4. **Privileges Granted Strictly to `service_role`:**
-   ```sql
-   grant all on all tables in schema public to service_role;
-   grant all on all sequences in schema public to service_role;
-   ```
+### 3.1 The Access Architecture Dilemma & US-33 AC2 Requirement
+Signed SRS §5 Module 8 (US-33 AC2) states:
+> *"The database scripts create an application database user that has no DELETE permission on core tables and no UPDATE permission on the payment ledger, receipts, and audit log, and the setup guide tells the deployer to use it."*
 
-### 3.2 Supabase API Key Policy & Dual-Client Architecture
+The repository audit (`docs/CTO_DATABASE_AUDIT.md`) established that:
+1. All 31 tables are fail-closed with RLS enabled, but currently have **zero policies**.
+2. All privileges are currently granted strictly to `service_role`.
+3. Relying entirely on `service_role` fails US-33 AC2 because `service_role` is a super-privileged key that bypasses RLS and possesses blanket SQL permissions.
+4. Exposing `service_role` to the browser is strictly prohibited.
 
-To avoid accidental privilege escalation and ensure strict defense-in-depth, the application strictly separates the **Cookie/Session SSR Client** from the **Privileged Server Data Client**:
+### 3.2 Evaluated Database Access Models
+
+| Model | Description | Pros | Cons | Verdict |
+|---|---|---|---|---|
+| **Model 1: Direct Client RLS (BaaS Style)** | Browser connects directly to Supabase using `anon`/`authenticated` tokens with 31+ complex RLS policies. | Native Supabase pattern; offloads API routes. | Exposes DB schema to browser; difficult to enforce multi-table atomic financial operations; no support for US-33 AC2 DB user; leaks complexity to client. | **REJECTED** |
+| **Model 2: Server-Only `service_role`** | Server-mediated monolith where all domain services use `service_role` client. | Simple single client; bypasses RLS hurdles. | Completely fails US-33 AC2; lacks defense-in-depth; accidental code bug could delete or mutate ledger. | **REJECTED as Sole Boundary** |
+| **Model 3: Server-Mediated Dual Security with Restricted Application DB Role (Recommended)** | 1. Browser uses `@supabase/ssr` (publishable key, HTTP-only cookie) to validate session and extract actor identity.<br>2. Server authorizes role and scope.<br>3. Server queries DB via a **dedicated restricted application role** (`school_app_user`) that has **NO DELETE** and **NO UPDATE on ledger**.<br>4. Complex atomic transactions execute via hardened `SECURITY DEFINER` stored procedures. | Strictly satisfies US-33 AC2; true defense-in-depth; zero privileged credentials exposed; exact atomicity; verified via SQL negative tests. | Requires authoring dedicated role migration and stored procedures in Phase 2. | **APPROVED & RECOMMENDED** |
+
+### 3.3 The Approved Three-Tier Security Architecture
 
 ```mermaid
 flowchart TD
-    Browser["Desktop Browser (Staff Office Client)"]
-    -->|HTTP Request + Session Cookie| NextServer["Next.js Server / Route Handler"]
+    Browser["Desktop Browser (Staff Client)"]
+    -->|HTTP Request + Encrypted Session Cookie| NextServer["Next.js Server / Route Handler"]
 
-    subgraph ClientSeparation ["Strict Client Separation Boundary"]
-        NextServer --> SSRClient["1. Session & Auth Client (@supabase/ssr)<br>• Uses Supabase publishable key (sb_publishable_...)<br>• Runs in caller's unprivileged user context<br>• Validates session via auth.getClaims() / auth.getUser()"]
+    subgraph ServerSecurityBoundary ["Trusted Server Boundary"]
+        NextServer --> SSRClient["1. Session Validator (@supabase/ssr)<br>• Uses NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY<br>• Validates JWT via auth.getClaims() / auth.getUser()<br>• Resolves auth.users.id"]
         
-        SSRClient --> AuthGuard{"2. Identity Valid & Active?<br>Maps auth user ID to staff_members.auth_user_id<br>Verifies staff_members.is_active = true"}
+        SSRClient --> AuthGuard{"2. Staff Verification Guard<br>• Maps to staff_members.auth_user_id<br>• Verifies staff_members.is_active = true"}
         AuthGuard -->|No / Inactive| Reject["401 Unauthorized / 403 Forbidden"]
         
-        AuthGuard -->|Yes| RBACGuard{"3. Role & Scope Guard<br>Permitted by AUTHORIZATION_MATRIX.md<br>academic_year_id active & matched"}
+        AuthGuard -->|Yes| RBACGuard{"3. Role & Scope Guard<br>• Permitted by AUTHORIZATION_MATRIX.md<br>• Enforces active academic_year_id scope<br>• Prohibits SYSADMIN from business approvals"}
         RBACGuard -->|Unauthorized| Deny["403 Forbidden"]
         
-        RBACGuard -->|Authorized| DataClient["4. Privileged Server Data Client (@supabase/supabase-js)<br>• Uses SUPABASE_SECRET_KEY (sb_secret_...) [server-only]<br>• Invoked strictly inside trusted domain services<br>• Executes audited business queries & atomic RPCs"]
+        RBACGuard -->|Authorized| DomainService["4. Domain Business Service<br>• Validates exact INR decimal math<br>• Prepares audited transaction payload<br>• Injects actor_staff_id"]
     end
 
-    DataClient --> PostgreSQL[("Supabase / PostgreSQL Database<br>(Fail-Closed RLS, 31 Tables)")]
-```
-
-#### Supabase API Key Policy
-- **Publishable Key Scope:** Use the Supabase publishable key for browser-accessible assets and cookie/session-aware SSR clients (`@supabase/ssr`).
-- **Secret Key Scope:** Use `SUPABASE_SECRET_KEY` (`sb_secret_...`) only in trusted backend code where elevated access is specifically required.
-- **Zero Leakage Invariant:** Never prefix the secret key with `NEXT_PUBLIC_`, expose it to the browser, commit it to source control, or write it to application logs.
-- **Legacy Key Migration Plan:** Keep legacy `anon` and `service_role` keys only where temporary compatibility requires them, with a planned migration and retirement path.
-- **RLS-Bypass Implications:** Treat the secret key as a credential that bypasses Row Level Security (RLS). Every operation using elevated access must pass server-side authentication, role authorization, record-scope validation, and business-rule checks.
-- **Client Separation:** Keep the cookie/session-aware SSR client strictly separate from the privileged server client.
-- **Defense in Depth:** Never assume RLS protects an operation performed with the secret key. Use RLS as defense in depth for clients operating under user-scoped credentials.
-
-#### Server-Side Identity Validation & Account Verification
-- **Validation Flow:** The server validates caller identity strictly through the official Supabase Auth server-side flow:
-  - Uses `supabase.auth.getClaims()` for fast, cryptographically validated JWT session claims.
-  - Uses `supabase.auth.getUser()` whenever a fresh, authoritative user record must be fetched directly from the Supabase Auth server.
-- **Publishable Key Client Restriction:** The cookie/session-aware `@supabase/ssr` client runs with unprivileged publishable credentials and **does not and cannot directly read the protected `auth.users` database table**.
-- **Trusted Identity Mapping:** The application maps the validated Auth user ID (`user.id`) to `public.staff_members.auth_user_id` exclusively through a trusted server-side query path.
-- **Zero Browser Trust:** Browser-supplied `user_id`, `role`, `staff_id`, or `academic_year_id` query parameters or headers are treated as completely untrusted input. The server resolves and enforces identity, role, and active status exclusively from the validated session claims and database records.
-- **Account Verification:** The server verifies that `staff_members.is_active = true`, checks role permissions against `AUTHORIZATION_MATRIX.md`, verifies the target `academic_year_id` scope, and enforces operation-specific business rules before granting access to protected data.
-
-### 3.3 Security, Scoping & Governance Controls
-- **Authentication & Identity Linkage:** Authenticate staff email/password via Supabase Auth. The server maps `auth.users.id` -> `public.staff_members.auth_user_id`.
-- **Active-Account Check:** Every request validates `staff_members.is_active = true`. Deactivated accounts immediately receive `403 Forbidden`.
-- **Role Authorization:** Every domain action checks caller role against `AUTHORIZATION_MATRIX.md` (Principal, Admission Officer, Clerk, Accountant, Read Only).
-- **Academic-Year Scoping:** All queries for year-specific entities (`sections`, `student_academic_records`, `fee_assessments`, `transport_assignments`, `receipts`, `student_year_certificates`) must include `WHERE academic_year_id = :active_year_id`. If `academic_years.status = 'closed'`, write mutations are rejected with `422 Unprocessable Entity (Academic Year Closed)`.
-- **Audit Logging:** State transitions in admissions, fee adjustments, payments, and certificate releases write an append-only row to `public.audit_logs`.
-- **Sensitive Data Protection:** Demographic records in `public.student_sensitive_details` are segregated 1:1, restricted to Principal and ADM, and never logged or exposed to other roles.
-
-### 3.4 Private Storage Architecture
-1. **Buckets:** Three private Supabase Storage buckets: `admission-documents`, `receipts`, `certificates`.
-2. **Public Access:** Disabled completely.
-3. **Presigned Short-Lived URLs:** Files are accessed exclusively via temporary URLs generated server-side with an expiry of **900 seconds (15 minutes)** after verifying user role and student record access.
-4. **Audit on Download:** Downloading a student document or reprinting a certificate PDF creates an entry in `public.audit_logs`.
-
----
-
-## 4. Business and Data-Safety Boundaries
-
-### 4.1 Inviolable Business Invariants (DEC-01 through DEC-12)
-1. **Admission Without Mandatory Payment (DEC-01):** Admission approval (`admission_applications.status = 'approved'`) must never require payment. The Admission Fee is variable; no minimum payment gate or forced installment plan is permitted.
-2. **Offline Payment Recording Only (DEC-02):** The application is strictly an offline collection recorder. No online payment gateways, wallets, or processor SDKs are in scope.
-3. **Shared Monotonic Receipt Numbering (DEC-03):** All receipts (School Fee, Books, Vehicle, Consolidated) draw sequentially from one unified monotonic numbering sequence (`RCT-YYYY-NNNNNN`) managed by `public.issue_receipt_number()`.
-4. **Final Fees Receipt at Zero Dues Only (DEC-04):** A numbered Final Fees Receipt is issued strictly when the net balance across all applicable fee heads is ₹0.00. An unnumbered Statement of Account is viewable/printable at any time.
-5. **Manager Signature Represents Principal (DEC-05):** Receipt templates require signature lines for Payer, Cashier, and Manager. The Manager is confirmed to be the Principal; Payer signs physically upon printout.
-6. **Zero Cross-Year Carry-Forward (DEC-06):** Unpaid balances at academic year-end are never automatically carried forward into the subsequent year's ledger.
-7. **Zero Hard Deletes & Immutable Ledger (DEC-07):** Database triggers (`private.prevent_hard_delete`, `private.reject_immutable_update`) enforce zero hard-deletes across 21 core tables. Financial corrections use approved reversal transactions.
-8. **Annual LC/TC Independent of Left Status (DEC-08):** LC/TC records are generated annually per student academic record. Generating an LC/TC does not mark a continuing student as "Left" or "Transferred".
-9. **Single Fee Category per Payment (DEC-10):** Every payment belongs to exactly one `fee_category` (`school_fee`, `vehicle`, `books`). Allocations cannot cross categories within a single payment.
-10. **Exact Decimal Monetary Arithmetic (DEC-11):** All currency calculations use exact decimal INR arithmetic (`numeric(10,2)` in DB; integer paise or `decimal.js` in Node.js). Floating-point math (`float`, `double`) is strictly banned.
-
-### 4.2 Atomic Financial Operations
-
-The payment-recording operation must be implemented as **one transactional PostgreSQL RPC/stored function** or **one server-managed direct PostgreSQL transaction**.
-
-The transaction must cover:
-1. The payment record (`public.payments`).
-2. Fee allocations across assessed fee heads (`public.payment_allocations`).
-3. Sequential receipt-number allocation (`public.issue_receipt_number`).
-4. Required receipt snapshot persistence (`public.receipts.rendered_snapshot`).
-5. Audit event persistence (`public.audit_logs`).
-
-It must validate all applicable business rules, prevent duplicate submissions, and handle concurrent allocation safely. Failure at any stage must roll back the entire operation.
-
-Separate Supabase REST requests must not be treated as one transaction.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Cashier as Accountant (Cashier)
-    participant API as Next.js API Route (/api/fees/payments)
-    participant Service as FeesLedgerService
-    participant RPC as PostgreSQL Transaction / Function (record_payment_and_issue_receipt)
-    participant DB as PostgreSQL 17 Engine (Atomic Transaction)
-    
-    Cashier->>API: POST /api/fees/payments (Payment Payload)
-    API->>Service: Validate Staff Role (Accountant), Active Status, and Year Scope
-    Service->>Service: Validate Single Fee Category & Decimal Arithmetic
-    
-    rect rgb(240, 248, 255)
-        note over Service,DB: Single Atomic Database Transaction Boundary
-        Service->>RPC: CALL record_payment_and_issue_receipt(...) OR direct PG transaction
-        RPC->>DB: 1. INSERT INTO public.payments (...) RETURNING payment_id
-        RPC->>DB: 2. INSERT INTO public.payment_allocations (...) [Validate head dues & category]
-        RPC->>DB: 3. CALL public.issue_receipt_number('RCT') [Atomic row-lock increment]
-        RPC->>DB: 4. INSERT INTO public.receipts (...) [Store rendered_snapshot JSONB]
-        RPC->>DB: 5. INSERT INTO public.audit_logs (...) [Audit entry with initiating actor]
-        RPC-->>DB: COMMIT TRANSACTION
+    subgraph DatabaseSecurityBoundary ["PostgreSQL Database Boundary (US-33 AC2)"]
+        DomainService -->|Standard Operational Queries| AppRoleClient["PostgreSQL Client (Role: school_app_user)<br>• GRANT SELECT, INSERT, UPDATE on core tables<br>• REVOKE DELETE on all 21 core tables<br>• REVOKE UPDATE on payments, allocations, receipts, audit_logs"]
+        
+        DomainService -->|Atomic Financial Workflows| HardenedRPC["Hardened Stored Procedures / RPC<br>• Defined with SECURITY DEFINER<br>• search_path = ''<br>• Fully schema-qualified objects (public.payments, etc.)<br>• Owned by dedicated least-privileged role (school_app_definer)<br>• EXECUTE granted strictly to school_app_user"]
+        
+        AppRoleClient --> PostgreSQLTables[("PostgreSQL 17 Tables<br>(Triggers: prevent_hard_delete, reject_immutable_update)")]
+        HardenedRPC --> PostgreSQLTables
     end
-    
-    RPC-->>Service: Return Payment & Receipt Record
-    Service-->>API: PaymentRecordedDTO
-    API-->>Cashier: 201 Created (Receipt Ready for Print)
 ```
 
-#### Function Architecture & Security Constraints
-- **Execution Model:** Database functions should use `SECURITY INVOKER` by default.
-- **SECURITY DEFINER Rationale & Privilege Boundary:** `SECURITY INVOKER` is preferred. `SECURITY DEFINER` may be considered only when executing with narrowly controlled owner privileges is strictly necessary for the chosen design. **Transactional consistency, row-level locking, or receipt numbering alone is not sufficient justification.**
-- **Hardened SECURITY DEFINER Requirements:** Where `SECURITY DEFINER` is justified, its implementation must strictly enforce:
-  - An **empty `search_path`** (`SET search_path = ''` in function definition) to prevent schema-hijacking attacks.
-  - **Fully schema-qualified object references** across all SQL statements (e.g., `public.payments`, `public.payment_allocations`, `public.receipt_number_counters`, `public.receipts`, `public.audit_logs`).
-  - **Narrowly scoped `EXECUTE` grants.**
-  - **Explicit authorization and parameter checks** within the function body.
-  - **Least-Privileged Function Owner:** Do not mandate ownership by `postgres` by default. Use a dedicated least-privileged `NOLOGIN` owner (e.g. `school_app_definer`) when practical, or document why platform constraints (such as managed cloud Supabase restrictions) require an alternative owner.
-- **Trust Boundary:** The application server acts as the primary gatekeeper validating authenticated caller identity, permissions, and business policy. The database function represents an internal transactional boundary that must never trust unvalidated client input.
-
-#### Conditional Function Permissions by Selected Access Path
-The permissions model must match the selected architecture path:
-
-1. **For the Supabase RPC Approach:**
-   - Grant execution privileges strictly to the intended server-side database role.
-   - A `service_role` grant is appropriate **only** when the selected invocation path uses that role and is protected by server-side authorization.
-   - Revoke default execution privileges for `PUBLIC`, `anon`, and `authenticated`:
-     ```sql
-     REVOKE ALL ON FUNCTION public.record_payment_and_issue_receipt(...) FROM PUBLIC, anon, authenticated;
-     GRANT EXECUTE ON FUNCTION public.record_payment_and_issue_receipt(...) TO service_role; -- only if invoked via service_role
-     ```
-   - Review helper functions, including `public.issue_receipt_number()` and sequence counters, so they do not expose unnecessary execution privileges to unauthorized roles.
-
-2. **For the Direct PostgreSQL Transaction Approach:**
-   - Specify a dedicated database connection role with the minimum permissions required (e.g., `INSERT` on `public.payments`, `public.payment_allocations`, `public.receipts`, `public.audit_logs`; `SELECT/UPDATE` on `public.receipt_number_counters`; zero DDL or superuser rights).
-   - Do **not** assume that `service_role` is automatically the caller.
-   - Document how actor identity, authorization, transaction integrity, and audit attribution are preserved:
-     - The application server explicitly injects the validated `actor_staff_id` into the transaction payload.
-     - Transaction integrity is enforced via native PostgreSQL `BEGIN ... COMMIT / ROLLBACK` blocks.
-
-3. **Common Attribution & Consistency Invariants (Both Approaches):**
-   - Validate the actual initiating staff actor and permissions in trusted application code.
-   - Do not trust role or identity values supplied directly by the browser.
-   - Ensure audit events identify the initiating actor (`actor_staff_id`) rather than merely recording a technical database role (such as `service_role` or `postgres`).
-   - Preserve the invariant that payment creation, fee allocation, receipt numbering, receipt snapshot persistence, and audit creation commit or roll back together.
-
-#### Milestone and Boundary Invariant
-This ADR records the intended architecture only. Financial function implementation, migrations, and database permission changes belong to their scheduled implementation milestone (Milestone M5.2) and require the applicable approval. No retained database changes are permitted during M1.1.
+### 3.4 Hardened Stored Procedure Security Rules
+Where `SECURITY DEFINER` is used for atomic business operations:
+1. **Empty Search Path:** Every procedure must specify `SET search_path = ''` to prevent search_path hijacking.
+2. **Fully Schema-Qualified Objects:** All table references must be explicitly qualified (e.g., `public.payments`, `public.payment_allocations`, `public.receipts`, `public.audit_logs`).
+3. **Dedicated Definer Owner:** Owned by `school_app_definer` (a `NOLOGIN` role holding minimum necessary schema mutation rights), never `postgres` superuser.
+4. **Execution Permissions:** `REVOKE ALL ON FUNCTION ... FROM PUBLIC, anon, authenticated;` and `GRANT EXECUTE ON FUNCTION ... TO school_app_user;`.
+5. **Caller Validation:** The procedure must validate that the provided `actor_staff_id` exists, is active, and possesses the requisite role.
 
 ---
 
-## 5. Environment Boundary, Testing & Rollback Strategy
+## 4. Inviolable Business Invariants & State Transitions
 
-### 5.1 Environment Boundary & Protection of Retained Database
-- **Retained Remote Database (`fjrfyzamiirqzitdchkz`):** Strictly protected. No development server, local script, reset command (`supabase db reset`), or migration execution will be directed against this project reference.
-- **Disposable Local Database Only:** All development, integration testing, and negative constraint testing must execute against a local disposable container (`supabase start` on local Docker).
-- **Tooling Prerequisite:** Supabase CLI is missing on the host PATH (`SETUP.md`). It is recorded strictly as a **mandatory prerequisite for the later disposable-local-database test task (M2.3)**, **not** as permission or reason to run database commands against the retained database now.
-
-### 5.2 Negative Testing Strategy
-Before any pull request is merged, the following automated negative verification suites must execute against the local disposable database:
-1. **Financial Boundary Tests:**
-   - Attempt payment allocation exceeding remaining head balance -> must reject (`validate_payment_allocation`).
-   - Attempt multi-category allocation within a single payment -> must reject (`enforce_single_category_per_payment`).
-   - Attempt payment insertion where allocation sum != payment amount -> must reject (`assert_payment_allocation_sum`).
-2. **Access Control Negative Tests (Acceptance Criteria):**
-   - **Unauthenticated Requests:** Request without session cookie -> must return `401 Unauthorized`.
-   - **Inactive User Accounts:** Request from user with valid Supabase Auth session but `staff_members.is_active = false` -> must return `403 Forbidden`.
-   - **Unauthorized Role Actions:**
-     - Clerk or Admission Officer attempting admission approval -> must return `403 Forbidden`.
-     - Accountant attempting fee concession creation -> must return `403 Forbidden`.
-     - SYSADMIN attempting admission approval, fee waiver, payment recording, certificate issuance, or PII inspection -> must return `403 Forbidden`.
-   - **Cross-Year Mutating Access:** Attempt write operation targeting closed academic year (`academic_years.status = 'closed'`) -> must return `422 Unprocessable Entity`.
-   - **Forged Browser-Supplied Roles / IDs:** Request providing modified `role`, `staff_id`, or `user_id` in headers/body -> server ignores client-supplied values and derives identity exclusively from validated session claims -> unauthorized operation returns `403 Forbidden`.
-   - **Privileged Operation Invocation Without Permission:** Direct attempt to invoke internal API routes or RPCs without required role/scope -> rejected and logged as security violation.
-3. **Data Immutability Tests:**
-   - Attempt `DELETE` on any of the 21 protected tables -> must throw PostgreSQL hard-delete rejection.
-   - Attempt `UPDATE` on committed `payments`, `payment_allocations`, or `receipts.rendered_snapshot` -> must reject.
-
-### 5.3 Rollback and Recovery Plan
-- **Architecture and Documentation:** Reversible via Git history (`git revert` or reset to `3536bc1`).
-- **Database Migrations (Future):** Every forward migration file (`*.sql`) must be accompanied by an audited rollback script (`*.down.sql`) verified on local Docker before PR submission.
-- **Application Deployment:** Handover package includes a containerized Dockerfile and standalone Node output capable of zero-downtime blue/green deployment and single-command rollback.
+1. **Admission Without Mandatory Payment (DEC-01 / BR-37):** Admission status approval (`admission_applications.status = 'approved'`) must never require payment. The Admission Fee is variable; no minimum payment gate or forced installment plan is permitted.
+2. **Offline Payment Recording Only (DEC-02 / BR-17):** The application is strictly an offline collection recorder. No online payment gateways, wallets, or processor SDKs are in scope.
+3. **Monotonic Identifiers & Formatting:**
+   - **Application Number:** `{sequence}/{academic_year_label}` (e.g. `161/2026-27`).
+   - **Admission Number:** `ADM-YYYY-NNNN` (e.g. `ADM-2026-0001`).
+   - **Receipt Number:** `RCT-YYYY-NNNNNN` (**6 digits zero-padded**, e.g. `RCT-2026-000001`). Unified series across School Fee, Books, Vehicle, and Final Receipts.
+   - **Transfer Certificate Number:** `TC-YYYY-NNNN` (e.g. `TC-2026-0001`).
+4. **Final Fees Receipt at Zero Dues Only (DEC-04 / BR-25):** A numbered Final Fees Receipt is issued strictly when the net balance across all applicable fee heads is ₹0.00. An unnumbered Statement of Account is viewable/printable at any time.
+5. **Manager Signature Represents Principal (DEC-05 / BR-26):** Receipt templates require signature lines for Payer, Cashier, and Manager. The Manager is confirmed to be the Principal; Payer signs physically upon printout.
+6. **Zero Cross-Year Carry-Forward (DEC-06 / BR-39):** Unpaid balances at academic year-end are never automatically carried forward into the subsequent year's ledger.
+7. **Zero Hard Deletes & Immutable Ledger (DEC-07 / BR-18, BR-30):** Enforced via `private.prevent_hard_delete()` and role privileges. Financial corrections use approved reversal transactions.
+8. **Annual LC/TC Independent of Left Status (DEC-08 / BR-36):** LC/TC records are generated annually per student academic record. Generating an LC/TC does not mark a continuing student as "Left" or "Transferred".
+9. **Single Fee Category per Payment (DEC-10 / BR-17):** Every payment belongs to exactly one `fee_category` (`school_fee`, `vehicle`, `books`). Allocations cannot cross categories within a single payment.
+10. **Exact Decimal Monetary Arithmetic (DEC-11 / NFR-05):** All currency calculations use exact decimal INR arithmetic (`numeric(10,2)` in DB; integer paise or `decimal.js` in Node.js). Floating-point math is strictly prohibited.
 
 ---
 
-## 6. Revision History & Gating Approvals
+## 5. Specification of the Eight Required Atomic Business Operations
 
-### 6.1 Revision History
-| Revision | Date | Author | Summary of Changes |
-|---|---|---|---|
-| 1.0 | 2026-10-26 | Shashidhar Pawadashetti | Initial architectural proposal and evaluation criteria. |
-| 1.1 | 2026-10-27 | Shashidhar Pawadashetti | Post-M0 audit revision: verified foundation baseline `5e1c47e`, resolved `Intallo` canonical remote, evaluated Options A & B, established server-side mediation model, defined dual-client separation, modern `SUPABASE_SECRET_KEY` convention, atomic financial RPC specifications, search_path protections, and migration artifact status for commit `d768254`. |
-| 1.2 | 2026-10-28 | Shashidhar Pawadashetti | Integrated formal Supabase API Key Policy and Atomic Financial Operations specification (empty search_path, schema-qualified objects, SECURITY INVOKER default, and legacy key retirement plan). |
-| 1.3 | 2026-10-28 | Shashidhar Pawadashetti | Security review refinement: corrected SSR client identity validation (auth.getClaims / auth.getUser vs auth.users direct read), hardened SECURITY DEFINER rationale (disallowing lock/sequence justification, requiring dedicated least-privileged owner, search_path = ''), structured conditional permissions for RPC vs direct PostgreSQL transaction access paths, clarified actor audit attribution, and expanded negative authorization test criteria. |
+| # | Operation Name | Triggering Endpoint | Transactional Scope & Guarantees | Failure & Rollback Behavior |
+|---|---|---|---|---|
+| **1** | `admit_student_atomic` | `POST /api/admissions/applications/{id}/approve` | 1. Row-lock section and verify `enrolled_count < max_capacity`.<br>2. Update `admission_applications.status = 'approved'`, record `approved_by`, `approved_at`.<br>3. Fetch next monotonic admission number (`ADM-YYYY-NNNN`).<br>4. Create/update `public.students`.<br>5. Insert `public.student_academic_records`.<br>6. Create initial `student_fee_assessments` and lines from approved fee structure.<br>7. Insert `public.audit_logs`. | If section capacity is reached, or fee structure missing, rolls back completely. Zero partial admission. |
+| **2** | `record_payment_and_issue_receipt` | `POST /api/fees/payments` | 1. Verify student academic record is active and matches academic year.<br>2. Verify single `fee_category` across all allocation lines.<br>3. Row-lock assessment lines; assert `sum(allocations) == payment.amount` and `allocation <= remaining_payable_balance`.<br>4. Insert `public.payments`.<br>5. Insert `public.payment_allocations`.<br>6. Fetch next sequential receipt number (`RCT-YYYY-NNNNNN`) from `receipt_number_counters`.<br>7. Insert `public.receipts` with immutable `rendered_snapshot` JSONB.<br>8. Insert `public.audit_logs`. | Any allocation mismatch, overpay on fixed head, or numbering contention rolls back entire payment. |
+| **3** | `approve_fee_concession_atomic` | `POST /api/fees/adjustments/{id}/approve` | 1. Verify caller has `principal` role.<br>2. Row-lock `fee_adjustments` and assessment line.<br>3. Assert `concession_amount <= remaining_net_payable`.<br>4. Update `status = 'approved'`, `approved_by`, `approved_at`.<br>5. Insert `public.audit_logs`. | If concession exceeds balance or non-Principal actor, aborts transaction. |
+| **4** | `reverse_payment_atomic` | `POST /api/fees/payments/{id}/reversal` | 1. Verify caller has `principal` role.<br>2. Row-lock original collection payment; assert not already reversed.<br>3. Insert reversal payment (`transaction_type = 'reversal'`, `reverses_payment_id = original.id`).<br>4. Insert offsetting negative `payment_allocations`.<br>5. Re-open assessment line balances.<br>6. Insert `public.audit_logs` with required justification reason. | Reversal fails if payment already reversed or reason missing. |
+| **5** | `issue_receipt_number_atomic` | Helper in payment/final receipt | 1. `SELECT next_value FROM receipt_number_counters WHERE series_code = p_series FOR UPDATE`.<br>2. Format string as `p_series-YYYY-NNNNNN` (**6 digits**).<br>3. Update counter `next_value = next_value + 1`. | Guarantees monotonic sequence with zero gap under transaction commit. |
+| **6** | `issue_final_receipt_atomic` | `POST /api/receipts/final` | 1. Row-lock all fee assessment lines for student academic record.<br>2. Compute net balance across all lines (`assessed + adjustments - collections + reversals`).<br>3. Assert `net_balance == 0.00`. If > 0, throw `422 Unprocessable Entity (Outstanding Dues Exist)`.<br>4. Fetch next receipt number (`RCT-YYYY-NNNNNN`).<br>5. Insert `public.consolidated_receipts` with `rendered_snapshot` JSONB.<br>6. Insert all prior receipt references into `public.consolidated_receipt_items`.<br>7. Insert `public.audit_logs`. | Rejects if any balance remains unpaid. Atomic binding of prior receipts. |
+| **7** | `issue_certificate_atomic` | `POST /api/certificates/{id}/issue` | 1. Verify caller has `principal` role.<br>2. Row-lock `student_year_certificates`.<br>3. Fetch next sequential certificate number (`TC-YYYY-NNNN`).<br>4. Update certificate `status = 'issued'`, `certificate_number`, `issued_at`.<br>5. Insert `public.certificate_versions` (version 1) with `content_snapshot` JSONB.<br>6. Insert `public.audit_logs`. | Fails if non-Principal or already issued. Certificate record immutable. |
+| **8** | `mark_student_left_atomic` | `POST /api/students/{id}/status` | 1. Verify caller has `principal` role.<br>2. Row-lock `student_academic_records`.<br>3. Update `status = 'left'` or `'transferred'`, record exit reason and exit date.<br>4. Insert `public.audit_logs`. | Fails if non-Principal. Record is preserved; zero hard deletion. |
 
-### 6.2 Gating Approvals Required to Close M1
-This architecture record remains in **`Proposed / Pending Approval`** status until the following formal approvals are provided:
+---
 
-1. **Technical Architecture Approval:**  
-   *Shashidhar Pawadashetti (Project Lead & Architecture Owner)*  
-   Decision: Formally approve Option A modular monolith framework, dual-client separation, and atomic database transaction boundary.
-2. **Client Business & Governance Approval:**  
-   *Rakesh Aralikatti (Client Signatory / Principal)*  
-   Decision: Formally ratify Section 3.3 role authority matrix (Principal institutional authority vs. SYSADMIN technical operator restriction).
+## 6. Sensitive PII Security, Encryption & Storage Architecture
 
-### 6.3 Downstream Milestone Unblocking
-Upon formal acceptance of ADR-001:
-- **Milestone M1.2:** Define explicit TypeScript domain module interfaces (`src/modules/*`).
-- **Milestone M1.3:** Author strongly-typed API and error contracts (`API_SPEC.md`).
-- **Milestone M1.4:** Finalize private document and PDF generation design.
-- **Milestone M2.1:** Scaffold Next.js application manifest (`package.json`), TypeScript configuration (`tsconfig.json`), and folder hierarchy.
+1. **Segregation:** Demographic PII is isolated in `public.student_sensitive_details` with 1:1 foreign key to `students`.
+2. **Access Control:** Restricted strictly to `principal` and `admission_officer`. SYSADMIN, Clerk, and Accountant cannot query this table.
+3. **Field Encryption:** Sensitive fields (`aadhaar_number`, `household_income_inr`, `caste_category`) are encrypted at rest using AES-256-GCM via application-level encryption service before database insertion. A SHA-256 HMAC hash of Aadhaar is stored in `aadhaar_hash` for unique duplicate detection.
+4. **Key Management:** Master encryption key `PII_ENCRYPTION_KEY` is loaded strictly from secure server environment variables. Versioned ciphertext (`v1:{iv}:{auth_tag}:{ciphertext}`) allows zero-downtime key rotation.
+5. **Private Document Storage:**
+   - 3 private Supabase Storage buckets: `admission-documents`, `receipts`, `certificates`.
+   - Public access completely disabled (`public = false`).
+   - File downloads authenticated via server route handler; presigned URLs generated with **900-second (15-minute) expiry**.
+   - Audit event logged on every document download or print action.
+
+---
+
+## 7. Migration, Testing & Rollback Strategy
+
+1. **Isolation from Remote:** The retained database (`fjrfyzamiirqzitdchkz`) will not be targeted for schema migrations or seed runs during development.
+2. **Local Testing Prerequisite:** All Phase 2 migrations and stored procedures will execute and be tested against a disposable local PostgreSQL container (`supabase start`).
+3. **Two-Way Migrations:** Every schema migration file `YYYYMMDDHHMMSS_name.sql` must have an accompanying rollback file `YYYYMMDDHHMMSS_name.down.sql`.
+4. **Automated Negative Test Gate:** CI/local verification must execute negative SQL test scripts proving:
+   - `school_app_user` cannot `DELETE` from any of the 21 core tables.
+   - `school_app_user` cannot `UPDATE` payments or audit logs.
+   - Non-Principal users cannot execute concession or certificate RPCs.
+   - Payment allocation exceeding remaining balance throws error.
+   - Multi-category payment throws error.
