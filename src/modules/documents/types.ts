@@ -23,15 +23,56 @@ export interface StudentDocumentDTO {
   admissionApplicationId: UUID | null;
   documentTypeId: UUID;
   documentTypeName: string;
+  documentTypeCode: string;
   fileName: string;
   fileSizeBytes: number;
   mimeType: string;
   storageBucket: string;
   storagePath: string;
   verificationStatus: DocumentVerificationStatus;
-  verifiedBy: UUID | null;
-  verifiedAt: IsoTimestampString | null;
+  replacesDocumentId: UUID | null;
+  versionNumber: number;
+  uploadedBy: UUID | null;
   uploadedAt: IsoTimestampString;
+  reviewedBy: UUID | null;
+  reviewedAt: IsoTimestampString | null;
+  rejectionReason: string | null;
+}
+
+export interface DocumentRequirementDTO {
+  id: UUID;
+  academicYearId: UUID;
+  gradeLevelId: UUID | null;
+  documentTypeId: UUID;
+  documentTypeCode: string;
+  documentTypeName: string;
+  isRequired: boolean;
+  appliesToNewAdmission: boolean;
+  notes: string | null;
+}
+
+export interface DocumentChecklistItemDTO {
+  documentTypeId: UUID;
+  code: string;
+  name: string;
+  isRequired: boolean;
+  isReceived: boolean;
+  documentId: UUID | null;
+  fileName: string | null;
+  uploadedAt: IsoTimestampString | null;
+  verificationStatus: DocumentVerificationStatus | null;
+  versionCount: number;
+}
+
+export interface ApplicationChecklistDTO {
+  applicationId: UUID;
+  academicYearId: UUID;
+  gradeLevelId: UUID;
+  totalRequired: number;
+  totalReceived: number;
+  missingMandatoryCount: number;
+  items: DocumentChecklistItemDTO[];
+  canSubmit: boolean;
 }
 
 export interface RequestPresignedUploadUrlDTO {
