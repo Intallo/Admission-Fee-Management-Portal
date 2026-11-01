@@ -130,7 +130,7 @@ psql -h <CLIENT_DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/migrations
 # 7. Provision school_app_login Password and System Secret Out-of-Band (DBA action)
 # NEVER commit this password or system secret to version control!
 psql -h <CLIENT_DB_HOST> -p 5432 -U postgres -d <DB_NAME> -c "ALTER ROLE school_app_login WITH PASSWORD '{{STRONG_CLIENT_SUPPLIED_SECRET}}';"
-psql -h <CLIENT_DB_HOST> -p 5432 -U postgres -d <DB_NAME> -c "INSERT INTO private.system_secrets (secret_name, secret_value) VALUES ('actor_signing_secret', '{{STRONG_RANDOM_HMAC_SECRET}}') ON CONFLICT (secret_name) DO UPDATE SET secret_value = EXCLUDED.secret_value;"
+psql -h <CLIENT_DB_HOST> -p 5432 -U postgres -d <DB_NAME> -c "INSERT INTO private.system_secrets (key_name, secret_value) VALUES ('actor_signing_secret', '{{STRONG_RANDOM_HMAC_SECRET}}') ON CONFLICT (key_name) DO UPDATE SET secret_value = EXCLUDED.secret_value, updated_at = now();"
 
 # 8. Verify post-migration integrity
 psql -h <CLIENT_DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/tests/us33_ac2_least_privilege_tests.sql
@@ -171,3 +171,58 @@ psql -h <DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/migrations/202610
 psql -h <DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/migrations/20261030000000_provision_restricted_app_role.down.sql
 ```
 *Effect:* Restores 4-digit receipt numbering and revokes role privileges for `school_app_user`.
+
+---
+
+## 5. HMAC Signing Secret Lifecycle, Rotation & Recovery Runbook
+
+### 5.1 Security Requirements (Milestone M8.3.2)
+1. **Zero Hardcoded Secrets:** No default HMAC secret is committed to Git or hardcoded in SQL or TypeScript.
+2. **Cryptographic Entropy:** Secrets must be generated using cryptographically secure random bytes (minimum 32 bytes / 64 hex characters):
+   ```bash
+   openssl rand -hex 32
+   ```
+3. **Fail-Closed Guarantees:**
+   - If `ACTOR_SIGNING_SECRET` is unset or shorter than 32 characters, the application server immediately throws `[SECURITY ERROR]` and halts transaction execution.
+   - If `private.system_secrets` lacks `actor_signing_secret` or its length is under 32 characters, `private.current_actor_role()` returns `NULL`, causing all Row-Level Security policies to deny access.
+4. **Caller Key Fallback Prohibited:** The caller-controlled `app.actor_signing_key` parameter is eliminated; all actor signatures must validate against the database vault `private.system_secrets`.
+
+### 5.2 Initial Secret Provisioning Procedure
+During initial deployment or CI database provisioning:
+```bash
+# 1. Generate high-entropy secret
+SECRET=$(openssl rand -hex 32)
+
+# 2. Store in application environment
+export ACTOR_SIGNING_SECRET="$SECRET"
+
+# 3. Provision into database vault as database administrator (postgres)
+psql -h <DB_HOST> -p 5432 -U postgres -d <DB_NAME> -c \
+  "INSERT INTO private.system_secrets (key_name, secret_value, updated_at) \
+   VALUES ('actor_signing_secret', '$SECRET', now()) \
+   ON CONFLICT (key_name) DO UPDATE SET secret_value = EXCLUDED.secret_value, updated_at = now();"
+```
+
+### 5.3 Scheduled Secret Rotation Procedure
+When rotating the actor signing secret in production:
+1. **Generate New Secret:**
+   ```bash
+   NEW_SECRET=$(openssl rand -hex 32)
+   ```
+2. **Stage Update in PostgreSQL Vault:**
+   Update the database secret atomically:
+   ```bash
+   psql -h <DB_HOST> -p 5432 -U postgres -d <DB_NAME> -c \
+     "UPDATE private.system_secrets SET secret_value = '$NEW_SECRET', updated_at = now() WHERE key_name = 'actor_signing_secret';"
+   ```
+3. **Update Application Environment & Perform Rolling Reload:**
+   Update `ACTOR_SIGNING_SECRET` in application configuration (e.g. secret manager or `.env`) and trigger a rolling restart of the application pool instances.
+4. **Verify Actor Signature Validity:**
+   Run the health probe and integration suite to confirm valid transactions complete and forged signatures are rejected.
+
+### 5.4 Emergency Secret Compromise & Recovery
+If the signing secret is suspected to be compromised:
+1. **Immediate Revocation & Re-keying:**
+   Generate and inject a new secret into `private.system_secrets` immediately. Active transactions signed with the old secret will be rejected by `private.current_actor_role()`.
+2. **Emergency Rollback (if database must be downgraded):**
+   Execute `20261101130000_verifiable_actor_and_auth_gateway.down.sql`. The rollback restores Migration 8's verified actor function *prior* to dropping `private.system_secrets`, maintaining business continuity without policy corruption.

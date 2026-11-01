@@ -14,14 +14,14 @@ create extension if not exists pgcrypto;
 create table if not exists private.system_secrets (
   key_name text primary key,
   secret_value text not null,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 revoke all on table private.system_secrets from public, anon, authenticated, school_app_user, school_app_login;
 
-insert into private.system_secrets (key_name, secret_value)
-values ('actor_signing_secret', 'school-app-actor-signing-secret-default-key-2026')
-on conflict (key_name) do nothing;
+-- Note: System secrets (including actor_signing_secret) are provisioned out-of-band by DBA / CI pipeline.
+-- Hardcoded fallback secrets in migrations are strictly prohibited (Milestone M8.3.2).
 
 -- 3. Verifiable Actor Identity Helper Function
 -- Verifies staff ID, active account status, asserted role match, AND cryptographic HMAC-SHA256 signature
@@ -50,6 +50,9 @@ begin
 
   begin
     v_staff_id := v_staff_id_raw::uuid;
+    if v_staff_id = '00000000-0000-0000-0000-000000000000'::uuid then
+      return null;
+    end if;
   exception when others then
     return null;
   end;
@@ -72,7 +75,7 @@ begin
 
   -- 4. Cryptographic signature check
   v_signature := pg_catalog.current_setting('app.actor_signature', true);
-  if v_signature is null or v_signature = '' then
+  if v_signature is null or v_signature = '' or length(v_signature) <> 64 then
     return null; -- Unsigned transaction: direct callers cannot spoof privileged roles
   end if;
 
@@ -80,16 +83,14 @@ begin
   from private.system_secrets
   where key_name = 'actor_signing_secret';
 
-  if v_secret is null then
-    v_secret := coalesce(
-      pg_catalog.current_setting('app.actor_signing_key', true),
-      'school-app-actor-signing-secret-default-key-2026'
-    );
+  -- Fail closed: missing or weak secret (< 32 chars) rejects all actor operations
+  if v_secret is null or length(v_secret) < 32 then
+    return null;
   end if;
 
   v_expected_signature := encode(hmac((v_staff_id::text || ':' || v_db_role)::bytea, v_secret::bytea, 'sha256'), 'hex');
 
-  if v_signature <> v_expected_signature then
+  if lower(v_signature) <> lower(v_expected_signature) then
     return null; -- Invalid signature: forged identity rejected
   end if;
 

@@ -13,7 +13,17 @@ let singletonPool: Pool | null = null;
  * Used by private.current_actor_role() to prevent caller role spoofing.
  */
 export function generateActorSignature(staffId: string, role: string, secretOverride?: string): string {
-  const secret = secretOverride || process.env.ACTOR_SIGNING_SECRET || 'school-app-actor-signing-secret-default-key-2026';
+  const secret = secretOverride !== undefined ? secretOverride : process.env.ACTOR_SIGNING_SECRET;
+  if (!secret || secret.trim() === '') {
+    throw new Error(
+      '[SECURITY ERROR] ACTOR_SIGNING_SECRET is not configured. Protected transactions require an explicit signing secret.'
+    );
+  }
+  if (secret.length < 32) {
+    throw new Error(
+      '[SECURITY ERROR] ACTOR_SIGNING_SECRET must be at least 32 characters long for cryptographic security.'
+    );
+  }
   return crypto.createHmac('sha256', secret).update(`${staffId}:${role}`).digest('hex');
 }
 
@@ -96,6 +106,8 @@ export async function withTransaction<T>(
     );
   }
 
+
+
   const pool = getPostgresPool();
   const client = await pool.connect();
 
@@ -137,6 +149,8 @@ export async function withTransaction<T>(
 export async function withSystemTransaction<T>(
   callback: (client: PoolClient) => Promise<T>
 ): Promise<T> {
+
+
   const pool = getPostgresPool();
   const client = await pool.connect();
 

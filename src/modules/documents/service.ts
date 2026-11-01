@@ -377,7 +377,16 @@ export class DocumentsService {
     if (!downloadUrl) {
       const expiresAt = Math.floor(Date.now() / 1000) + expiresInSeconds;
       const signature = crypto
-        .createHmac('sha256', process.env.ACTOR_SIGNING_SECRET || 'school-app-actor-signing-secret-default-key-2026')
+        .createHmac('sha256', (() => {
+          const secret = process.env.ACTOR_SIGNING_SECRET;
+          if (!secret || secret.trim() === '') {
+            throw new Error('[SECURITY ERROR] ACTOR_SIGNING_SECRET is not configured. Protected document token generation requires an explicit signing secret.');
+          }
+          if (secret.length < 32) {
+            throw new Error('[SECURITY ERROR] ACTOR_SIGNING_SECRET must be at least 32 characters long for cryptographic security.');
+          }
+          return secret;
+        })())
         .update(`${doc.id}:${expiresAt}`)
         .digest('hex');
       downloadUrl = `https://storage.school.internal/admission-documents/${doc.storagePath}?token=${signature}&expires=${expiresAt}`;

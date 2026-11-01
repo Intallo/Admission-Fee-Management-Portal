@@ -67,6 +67,13 @@ done
 
 echo "    All $MIGRATION_COUNT forward migrations executed successfully without errors."
 
+# Provision runtime actor signing secret if supplied (CI or test environment)
+if [ -n "${ACTOR_SIGNING_SECRET:-}" ]; then
+  echo "==> Provisioning runtime ACTOR_SIGNING_SECRET into private.system_secrets..."
+  psql -v ON_ERROR_STOP=1 -c "INSERT INTO private.system_secrets (key_name, secret_value) VALUES ('actor_signing_secret', '${ACTOR_SIGNING_SECRET}') ON CONFLICT (key_name) DO UPDATE SET secret_value = EXCLUDED.secret_value, updated_at = now();"
+  echo "    Actor signing secret successfully provisioned into private.system_secrets."
+fi
+
 # Step 4: Run Verification & Collect Migration Execution Evidence
 echo "==> [4/4] Collecting database verification evidence..."
 
