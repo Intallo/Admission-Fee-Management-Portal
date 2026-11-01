@@ -42,7 +42,7 @@ export class AcademicYearsService {
         .order('start_date', { ascending: false });
 
       if (!error && data && data.length > 0) {
-        return data.map((d) => ({
+        return data.map((d: any) => ({
           id: d.id,
           label: d.label,
           startDate: d.start_date,

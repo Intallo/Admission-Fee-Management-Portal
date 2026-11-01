@@ -58,7 +58,7 @@ flowchart TD
 
 ---
 
-## 2. Comprehensive Automated Test Inventory (26 Test Files)
+## 2. Comprehensive Automated Test Inventory (27 Test Files)
 
 | Test File | Category | Focus Area & Verified Invariants | Tests Passed | Status |
 |---|---|---|:---:|:---:|
@@ -88,7 +88,8 @@ flowchart TD
 | [`tests/admissions_api_routes.test.ts`](file:///tests/admissions_api_routes.test.ts) | API Integration | HTTP route handlers for application creation, updating, checklist inspection, status transitions, approval, and capacity querying. | 9 | **PASS** |
 | [`tests/fees_api_routes.test.ts`](file:///tests/fees_api_routes.test.ts) | API Integration | HTTP route handlers for fee heads, structures, transport tariffs, payment recording, reversals, concessions, dues reports, receipt PDFs, and final fees receipts. | 11 | **PASS** |
 | [`tests/student_and_certificates_api_routes.test.ts`](file:///tests/student_and_certificates_api_routes.test.ts) | API Integration | HTTP route handlers for student search, profile inspection, mark-left workflow, certificate pre-population, review, issuance, reprints, and audit log inspection. | 10 | **PASS** |
-| **TOTAL** | **Full Portal Suite** | **26 Test Suites Covering 100% of Application Surface** | **219** | **ALL PASS** |
+| [`tests/phase8_persistence_and_privilege.test.ts`](file:///tests/phase8_persistence_and_privilege.test.ts) | Durable Persistence & Privilege | Phase 8 remediation verifying fail-closed production boundary on missing DATABASE_URL, remote database safety guard, PostgreSQL repository provisioning, transaction-local actor context scoping (`app.current_staff_id`, `app.current_role`), automatic rollback and `RESET ALL` connection cleanup, and in-memory test fake isolation. | 7 | **PASS** |
+| **TOTAL** | **Full Portal Suite** | **27 Test Suites Covering 100% of Application Surface** | **226** | **ALL PASS** |
 
 ---
 

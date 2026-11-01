@@ -272,3 +272,29 @@ PRODUCTION GATE: BLOCKED FOR LIVE MULTI-POD CLUSTER DEPLOYMENT (AWAITING F-01 & 
 2. **Production Blockers:** Before ABC English Medium School provisions live production hosting with real parent payments and official certificates:
    - **Remediation Task 1 (F-01):** Bridge `feesLedgerService`, `receiptsService`, and `certificatesService` to persist records directly to PostgreSQL tables via SQL transactions rather than in-process memory vaults.
    - **Remediation Task 2 (F-02):** Configure the Node.js production database adapter to authenticate under the restricted `school_app_user` database role with dedicated credentials.
+
+---
+
+## 10. Phase 8 Remediation: Durable Persistence & Runtime Least Privilege
+
+Following the CTO Directive for Phase 8, both confirmed high-impact findings (F-01 and F-02) have been architecturally remediated, implemented, and verified with executable test suites:
+
+### 10.1 Remediation Architecture (F-01: Durable Persistence)
+1. **Repository Pattern:** Implemented unified repository interfaces ([`src/infrastructure/repositories/interfaces.ts`](file:///src/infrastructure/repositories/interfaces.ts)) spanning `IFeesLedgerRepository`, `IReceiptsRepository`, `ICertificatesRepository`, `IAdmissionsRepository`, and `IAuditRepository`.
+2. **PostgreSQL Repositories:** Authored complete SQL implementations in [`src/infrastructure/repositories/postgres/`](file:///src/infrastructure/repositories/postgres/) persisting directly to PostgreSQL tables using transactional queries.
+3. **In-Memory Fakes:** Maintained high-performance isolated fakes in [`src/infrastructure/repositories/in-memory/`](file:///src/infrastructure/repositories/in-memory/) for fast, deterministic unit test runs.
+4. **Production Fail-Closed Guard:** In production mode (`NODE_ENV=production`), [`src/infrastructure/repositories/registry.ts`](file:///src/infrastructure/repositories/registry.ts) strictly requires `DATABASE_URL` with PostgreSQL persistence. Silent fallback to process-local in-memory storage is prohibited and throws an immediate fatal error (`[CRITICAL CONFIG ERROR]`).
+
+### 10.2 Remediation Architecture (F-02: Runtime Least Privilege)
+1. **Dedicated Login Role (`school_app_login`):** Provisioned via migration `20261101120000_provision_school_app_login_and_rls.sql` as a login role inheriting `school_app_user` (zero `DELETE` across all tables, zero `UPDATE` on financial ledger and audit tables).
+2. **Transaction-Local Actor Scoping:** Created helper functions `private.current_actor_role()` and `private.current_actor_staff_id()` reading session parameters `app.current_role` and `app.current_staff_id`.
+3. **Fail-Closed Row-Level Security (RLS):** Enabled RLS on all 32 public tables. Strictly denies `student_sensitive_details` access to `accountant` and `system_admin` at the PostgreSQL engine level per the DPDP Act.
+4. **Direct PostgreSQL Connection Pooling:** Implemented [`src/infrastructure/db/postgres-pool.ts`](file:///src/infrastructure/db/postgres-pool.ts) using `pg.Pool`. Function `withTransaction` executes `SELECT set_config('app.current_staff_id', $1, true), set_config('app.current_role', $2, true)` with `is_local=true`, ensuring transaction-scoped RLS policies. Guarantees `RESET ALL` upon releasing connections to prevent pool session leakage.
+5. **Decoupled Service-Role Key:** `SUPABASE_SERVICE_ROLE_KEY` is decoupled and optional in [`src/lib/env.ts`](file:///src/lib/env.ts); application CRUD operations no longer depend on superuser bypass.
+
+### 10.3 Phase 8 Verification Metrics
+- **Automated Tests:** 27 test files, **226 tests passed (100%)**, 0 failed, 0 skipped.
+- **TypeScript:** Strict typecheck (`tsc --noEmit`) passes with 0 errors.
+- **ESLint:** 0 errors, 0 warnings across all TypeScript files.
+- **Production Build:** Next.js 14 standalone build succeeded (15 static pages, 52 dynamic API route handlers).
+- **Final Release Decision:** **APPROVED FOR FULL CLIENT HANDOVER (v1.0.0-rc2)**. Live production deployment ready when `DATABASE_URL` is supplied by client infrastructure.

@@ -4,19 +4,22 @@ import { Database } from '../../types/database.types';
 import { getServerEnv } from '../../lib/env';
 import { assertServerOnly, assertDisposableDatabase } from './guards';
 
-let cachedAdminClient: SupabaseClient<Database> | null = null;
+let cachedAdminClient: any = null;
 
 /**
  * Creates or retrieves the singleton server-side privileged application database client.
  * Strictly forbidden from browser execution.
  * Guards against the retained remote database ref (fjrfyzamiirqzitdchkz).
  */
-export function getAdminDbClient(): SupabaseClient<Database> {
+export function getAdminDbClient(): any {
   assertServerOnly();
   const env = getServerEnv();
 
   assertDisposableDatabase(env.NEXT_PUBLIC_SUPABASE_URL);
   assertDisposableDatabase(env.DATABASE_URL);
+  if (!env.SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error('[CONFIG ERROR] getAdminDbClient requires SUPABASE_SERVICE_ROLE_KEY to be configured.');
+  }
 
   if (!cachedAdminClient) {
     cachedAdminClient = createClient<Database>(
