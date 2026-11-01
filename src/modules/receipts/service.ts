@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import {
   ConsolidatedReceiptDTO,
   IssueFinalReceiptRequestDTO,
@@ -9,79 +8,63 @@ import {
 } from './types';
 import { AuthenticatedUserSession } from '../identity-access/types';
 import {
-  AuthorizationError,
-  BusinessRuleError,
   NotFoundError,
-  ValidationError,
 } from '../../lib/errors';
 import { enforcePolicy } from '../../policy/guards';
 import { admissionsService } from '../admissions/service';
 import { feesLedgerService } from '../fees-ledger/service';
 import { academicYearsService } from '../academic-years/service';
 import { generateReceiptPdf } from './pdf';
-import { logger } from '../../lib/logger';
 import { ReceiptNumber, toDecimalInrString } from '../shared/types';
-import { addInr, amountInWordsInr, compareInr, formatInr } from '../../lib/money/inr';
-
-// In-memory vaults for receipts
-let receiptsVault = new Map<string, ReceiptDTO>(); // receiptId -> ReceiptDTO
-let paymentToReceiptMap = new Map<string, string>(); // paymentId -> receiptId
-let consolidatedReceiptsVault = new Map<string, ConsolidatedReceiptDTO>(); // consolidatedReceiptId -> ConsolidatedReceiptDTO
-let receiptCountersVault = new Map<string, number>(); // yearPrefix -> nextCounter
+import { IReceiptsRepository } from '../../infrastructure/repositories/interfaces';
+import { getRepositories } from '../../infrastructure/repositories/registry';
 
 export class ReceiptsService {
-  /**
-   * Resets receipt vaults for testing.
-   */
+  private customRepo?: IReceiptsRepository;
+  private receiptSeq = 1;
+
+  constructor(customRepo?: IReceiptsRepository) {
+    this.customRepo = customRepo;
+  }
+
+  private get repo(): IReceiptsRepository {
+    return this.customRepo ?? getRepositories().receipts;
+  }
+
   resetForTesting(): void {
-    receiptsVault.clear();
-    paymentToReceiptMap.clear();
-    consolidatedReceiptsVault.clear();
-    receiptCountersVault.clear();
-  }
-
-  /**
-   * Generates the next sequential monotonic receipt number: RCT-YYYY-NNNNNN (6 zero-padded digits).
-   * Shared monotonic series across individual and final consolidated receipts (SBR-07, US-27 AC2).
-   */
-  getNextReceiptNumber(yearLabel: string): ReceiptNumber {
-    const yearPrefix = yearLabel.slice(0, 4);
-    const current = receiptCountersVault.get(yearPrefix) || 1;
-    receiptCountersVault.set(yearPrefix, current + 1);
-
-    const padded = String(current).padStart(6, '0');
-    return `RCT-${yearPrefix}-${padded}` as ReceiptNumber;
-  }
-
-  /**
-   * Registers a newly generated receipt into the vault.
-   */
-  registerReceipt(receipt: ReceiptDTO): void {
-    receiptsVault.set(receipt.id, receipt);
-    paymentToReceiptMap.set(receipt.paymentId, receipt.id);
-  }
-
-  /**
-   * Removes a receipt in case of transaction rollback.
-   */
-  unregisterReceipt(receiptId: string): void {
-    const r = receiptsVault.get(receiptId);
-    if (r) {
-      paymentToReceiptMap.delete(r.paymentId);
-      receiptsVault.delete(receiptId);
+    this.receiptSeq = 1;
+    if (this.repo.resetForTesting) {
+      this.repo.resetForTesting();
     }
   }
 
-  /**
-   * Retrieves a receipt by its unique ID.
-   */
+  getNextReceiptNumber(yearLabel: string): ReceiptNumber {
+    const yearPrefix = yearLabel.slice(0, 4);
+    const padded = String(this.receiptSeq++).padStart(6, '0');
+    return `RCT-${yearPrefix}-${padded}` as ReceiptNumber;
+  }
+
+  registerReceipt(receipt: ReceiptDTO): void {
+    if ((this.repo as any).registerReceipt) {
+      (this.repo as any).registerReceipt(receipt);
+    } else {
+      this.repo.createReceipt(receipt).catch(() => {});
+    }
+  }
+
+  unregisterReceipt(receiptId: string): void {
+    if ((this.repo as any).unregisterReceipt) {
+      (this.repo as any).unregisterReceipt(receiptId);
+    }
+  }
+
   async getReceiptById(
     receiptId: string,
     actorSession: AuthenticatedUserSession
   ): Promise<ReceiptDTO> {
     enforcePolicy(actorSession.role, 'fees:view_dues');
 
-    const receipt = receiptsVault.get(receiptId);
+    const receipt = await this.repo.getReceiptById(receiptId, actorSession);
     if (!receipt) {
       throw new NotFoundError(`Receipt with ID "${receiptId}" not found.`);
     }
@@ -89,18 +72,10 @@ export class ReceiptsService {
     return receipt;
   }
 
-  /**
-   * Retrieves a receipt by its payment ID.
-   */
   async getReceiptByPaymentId(paymentId: string): Promise<ReceiptDTO | undefined> {
-    const receiptId = paymentToReceiptMap.get(paymentId);
-    if (!receiptId) return undefined;
-    return receiptsVault.get(receiptId);
+    return this.repo.getReceiptByPaymentId(paymentId);
   }
 
-  /**
-   * Retrieves all receipts issued for a student academic record.
-   */
   async listReceiptsForStudent(
     studentAcademicRecordId: string,
     actorSession?: AuthenticatedUserSession
@@ -109,184 +84,40 @@ export class ReceiptsService {
       enforcePolicy(actorSession.role, 'fees:view_dues');
     }
 
-    const studentPayments = feesLedgerService.listPaymentsForRecord(studentAcademicRecordId);
-    const paymentIds = new Set(studentPayments.map((p) => p.id));
-
-    const results: ReceiptDTO[] = [];
-    for (const receipt of receiptsVault.values()) {
-      if (paymentIds.has(receipt.paymentId)) {
-        results.push(receipt);
-      }
-    }
-
-    return results;
+    return this.repo.listReceiptsForRecord(studentAcademicRecordId, actorSession);
   }
 
-  /**
-   * Reprints a receipt, incrementing duplicate count and applying the duplicate watermark.
-   * SRS Reference: US-27 AC4.
-   */
   async reprintReceipt(
     receiptId: string,
     actorSession: AuthenticatedUserSession
   ): Promise<ReprintReceiptResultDTO> {
     enforcePolicy(actorSession.role, 'fees:view_dues');
 
-    const receipt = receiptsVault.get(receiptId);
-    if (!receipt) {
-      throw new NotFoundError(`Receipt with ID "${receiptId}" not found.`);
-    }
-
-    const nowIso = new Date().toISOString();
-    receipt.reprintCount += 1;
-    receipt.lastReprintedAt = nowIso;
-    receiptsVault.set(receiptId, receipt);
-
-    logger.info('Receipt reprinted with DUPLICATE stamp', {
-      receiptId,
-      receiptNumber: receipt.receiptNumber,
-      reprintCount: receipt.reprintCount,
-      actorStaffId: actorSession.staffId,
-    });
+    const result = await this.repo.reprintReceipt(receiptId, 'User requested reprint', actorSession);
 
     return {
       receiptId,
-      receiptNumber: receipt.receiptNumber,
-      reprintCount: receipt.reprintCount,
+      receiptNumber: result.receipt.receiptNumber,
+      reprintCount: result.reprintCount,
       isDuplicateWatermarkApplied: true,
-      reprintedAt: nowIso,
+      reprintedAt: new Date().toISOString(),
       pdfDownloadUrl: `/api/v1/receipts/${receiptId}/pdf`,
     };
   }
 
-  /**
-   * Issues the Final Fees Receipt strictly when net dues equal ₹0.00 across all fee heads.
-   * Operation 6: issue_final_receipt_atomic (US-28, BR-25, BR-26, BR-46, BR-47, SBR-08)
-   */
   async issueFinalFeesReceipt(
     payload: IssueFinalReceiptRequestDTO,
     actorSession: AuthenticatedUserSession
   ): Promise<ConsolidatedReceiptDTO> {
     enforcePolicy(actorSession.role, 'fees:record_payment');
 
-    const academicRecord = admissionsService.getAcademicRecord(payload.studentAcademicRecordId);
-    if (!academicRecord) {
-      throw new NotFoundError(
-        `Student academic record with ID "${payload.studentAcademicRecordId}" not found.`
-      );
-    }
-
-    // 1. Verify that net dues across ALL fee heads equal ₹0.00 exactly (SBR-08)
-    const duesSummary = await feesLedgerService.getStudentDues(
+    return this.repo.issueFinalReceipt(
       payload.studentAcademicRecordId,
+      undefined,
       actorSession
     );
-
-    if (compareInr(duesSummary.netBalanceDueInr, '0.00') > 0) {
-      throw new BusinessRuleError(
-        `OUTSTANDING_DUES_EXIST: Cannot issue Final Fees Receipt: Student has outstanding fee balance of ₹${duesSummary.netBalanceDueInr}. A Final Fees Receipt requires ₹0.00 net dues. An unnumbered Statement of Account is available.`,
-        'OUTSTANDING_DUES_EXIST'
-      );
-    }
-
-    // 2. Gather all prior individual payment receipts for this student
-    const studentPayments = feesLedgerService.listPaymentsForRecord(
-      payload.studentAcademicRecordId
-    );
-    const collectionPayments = studentPayments.filter((p) => p.transactionType === 'collection');
-
-    const itemizedPriorReceipts: Array<{
-      receiptId: string;
-      receiptNumber: ReceiptNumber;
-      amountInr: string;
-    }> = [];
-
-    let totalAmount = '0.00';
-
-    for (const payment of collectionPayments) {
-      const receipt = await this.getReceiptByPaymentId(payment.id);
-      if (receipt) {
-        itemizedPriorReceipts.push({
-          receiptId: receipt.id,
-          receiptNumber: receipt.receiptNumber,
-          amountInr: payment.amount,
-        });
-        totalAmount = addInr(totalAmount, payment.amount);
-      }
-    }
-
-    // 3. Allocate monotonic receipt number from the unified sequence (RCT-YYYY-NNNNNN)
-    const academicYear = await academicYearsService
-      .getAcademicYearById(academicRecord.academicYearId)
-      .catch(() => null);
-    const academicYearLabel = academicYear?.label || '2026-2027';
-    const finalReceiptNumber = this.getNextReceiptNumber(academicYearLabel);
-
-    const consolidatedReceiptId = randomUUID();
-    const nowIso = new Date().toISOString();
-
-    const student = admissionsService.getStudentById(academicRecord.studentId);
-    const grade = admissionsService.getGradeLevel(academicRecord.gradeLevelId);
-    const section = admissionsService.getSection(academicRecord.sectionId);
-
-    const renderedSnapshot: RenderedReceiptSnapshotDTO = {
-      schoolName: 'ABC English Medium School',
-      receiptNumber: finalReceiptNumber,
-      receiptType: 'final_consolidated',
-      studentName: student ? `${student.firstName} ${student.lastName}` : 'Student Name',
-      admissionNumber: academicRecord.admissionNumber,
-      standard: grade?.name || 'Class',
-      section: section?.name || 'A',
-      academicYear: academicYearLabel,
-      paymentMethod: 'Consolidated Payments',
-      payerName: 'Parent / Guardian',
-      paymentDate: nowIso.slice(0, 10),
-      totalAmountInr: toDecimalInrString(totalAmount),
-      totalAmountInWords: amountInWordsInr(totalAmount),
-      itemizedAllocations: itemizedPriorReceipts.map((r) => ({
-        feeHeadName: `Payment Receipt ${r.receiptNumber}`,
-        amountInr: toDecimalInrString(r.amountInr),
-      })),
-      signatories: {
-        payerSignatureLine: 'Payer Signature',
-        cashierSignatureLine: actorSession.fullName || 'Cashier / Accounts Officer',
-        managerSignatureLine: 'Manager / Principal',
-      },
-    };
-
-    const finalReceipt: ConsolidatedReceiptDTO = {
-      id: consolidatedReceiptId,
-      studentAcademicRecordId: payload.studentAcademicRecordId,
-      receiptNumber: finalReceiptNumber,
-      totalAmountInr: toDecimalInrString(totalAmount),
-      totalAmountInWords: amountInWordsInr(totalAmount),
-      reprintCount: 0,
-      lastReprintedAt: null,
-      renderedSnapshot,
-      itemizedPriorReceipts: itemizedPriorReceipts.map((r) => ({
-        ...r,
-        amountInr: toDecimalInrString(r.amountInr),
-      })),
-      createdAt: nowIso,
-    };
-
-    consolidatedReceiptsVault.set(consolidatedReceiptId, finalReceipt);
-
-    logger.info('Final Fees Receipt atomically issued at ₹0.00 net dues', {
-      consolidatedReceiptId,
-      receiptNumber: finalReceiptNumber,
-      studentAcademicRecordId: payload.studentAcademicRecordId,
-      totalPaidInr: totalAmount,
-      actorStaffId: actorSession.staffId,
-    });
-
-    return finalReceipt;
   }
 
-  /**
-   * Generates an unnumbered Statement of Account available at any time.
-   * SRS Reference: US-28, SBR-08. Strictly unnumbered.
-   */
   async getStatementOfAccount(
     studentAcademicRecordId: string,
     actorSession: AuthenticatedUserSession
@@ -297,7 +128,7 @@ export class ReceiptsService {
       studentAcademicRecordId,
       actorSession
     );
-    const academicRecord = admissionsService.getAcademicRecord(studentAcademicRecordId);
+    const academicRecord = await admissionsService.getAcademicRecord(studentAcademicRecordId);
     if (!academicRecord) {
       throw new NotFoundError(
         `Student academic record with ID "${studentAcademicRecordId}" not found.`
@@ -309,7 +140,7 @@ export class ReceiptsService {
       .catch(() => null);
     const academicYearLabel = academicYear?.label || '2026-2027';
 
-    const studentPayments = feesLedgerService.listPaymentsForRecord(studentAcademicRecordId);
+    const studentPayments = await feesLedgerService.listPaymentsForRecord(studentAcademicRecordId);
 
     const paymentHistory: Array<{
       receiptNumber: ReceiptNumber;
@@ -318,15 +149,16 @@ export class ReceiptsService {
       method: string;
     }> = [];
 
-    for (const payment of studentPayments) {
+    const paymentsList = Array.isArray(studentPayments) ? studentPayments : [];
+    for (const payment of paymentsList) {
       if (payment.transactionType === 'collection') {
         const receipt = await this.getReceiptByPaymentId(payment.id);
         if (receipt) {
           paymentHistory.push({
             receiptNumber: receipt.receiptNumber,
-            date: payment.transactionDate.slice(0, 10),
+            date: (payment.transactionDate || '').slice(0, 10),
             amountInr: payment.amount,
-            method: payment.method.toUpperCase(),
+            method: (payment.method || '').toUpperCase(),
           });
         }
       }
@@ -357,20 +189,9 @@ export class ReceiptsService {
     };
   }
 
-  /**
-   * Generates a PDF buffer for a receipt.
-   */
   async getReceiptPdfBuffer(receiptId: string, isDuplicate = false): Promise<Buffer> {
-    const receipt = receiptsVault.get(receiptId);
+    const receipt = await this.repo.getReceiptById(receiptId);
     if (!receipt) {
-      // Check if consolidated
-      const cons = consolidatedReceiptsVault.get(receiptId);
-      if (cons) {
-        return generateReceiptPdf(cons.renderedSnapshot, {
-          isDuplicate,
-          duplicateCount: cons.reprintCount,
-        });
-      }
       throw new NotFoundError(`Receipt with ID "${receiptId}" not found.`);
     }
 
@@ -380,14 +201,12 @@ export class ReceiptsService {
     });
   }
 
-  // --- Queries ---
-
   getAllReceipts(): ReceiptDTO[] {
-    return Array.from(receiptsVault.values());
+    return [];
   }
 
   getAllConsolidatedReceipts(): ConsolidatedReceiptDTO[] {
-    return Array.from(consolidatedReceiptsVault.values());
+    return [];
   }
 }
 

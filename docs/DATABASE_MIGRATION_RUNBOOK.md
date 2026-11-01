@@ -88,7 +88,17 @@ psql -h <CLIENT_DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/migrations
 # 3. Apply Migration 6 (Staff Security Profiles Vault)
 psql -h <CLIENT_DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/migrations/20261031000000_staff_auth_security.sql
 
-# 4. Verify post-migration integrity
+# 4. Apply Migration 7 (Private Storage Buckets)
+psql -h <CLIENT_DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/migrations/20261101000000_provision_private_storage_buckets.sql
+
+# 5. Apply Migration 8 (school_app_login role & RLS)
+psql -h <CLIENT_DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/migrations/20261101120000_provision_school_app_login_and_rls.sql
+
+# 6. Provision school_app_login Password Out-of-Band (DBA action)
+# NEVER commit this password to version control!
+psql -h <CLIENT_DB_HOST> -p 5432 -U postgres -d <DB_NAME> -c "ALTER ROLE school_app_login WITH PASSWORD '{{STRONG_CLIENT_SUPPLIED_SECRET}}';"
+
+# 7. Verify post-migration integrity
 psql -h <CLIENT_DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/tests/us33_ac2_least_privilege_tests.sql
 ```
 
@@ -98,13 +108,25 @@ psql -h <CLIENT_DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/tests/us33
 
 If a migration must be reverted, apply the corresponding `.down.sql` script in reverse order:
 
-### 4.1 Reverting Migration 6 (`staff_auth_security`)
+### 4.1 Reverting Migration 8 (`provision_school_app_login_and_rls`)
+```powershell
+psql -h <DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/migrations/20261101120000_provision_school_app_login_and_rls.down.sql
+```
+*Effect:* Safely drops `school_app_login` role, RLS policies, and actor context helper functions.
+
+### 4.2 Reverting Migration 7 (`provision_private_storage_buckets`)
+```powershell
+psql -h <DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/migrations/20261101000000_provision_private_storage_buckets.down.sql
+```
+*Effect:* Safely drops private storage buckets and bucket RLS policies.
+
+### 4.3 Reverting Migration 6 (`staff_auth_security`)
 ```powershell
 psql -h <DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/migrations/20261031000000_staff_auth_security.down.sql
 ```
 *Effect:* Safely drops `public.staff_security_profiles` table and triggers.
 
-### 4.2 Reverting Migration 5 (`provision_restricted_app_role`)
+### 4.4 Reverting Migration 5 (`provision_restricted_app_role`)
 ```powershell
 psql -h <DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/migrations/20261030000000_provision_restricted_app_role.down.sql
 ```

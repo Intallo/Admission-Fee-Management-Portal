@@ -9,15 +9,44 @@ let singletonPool: Pool | null = null;
 
 /**
  * Creates or retrieves the singleton server-only PostgreSQL connection pool.
- * Uses direct connection credentials configured in DATABASE_URL.
- * Replaces privileged service_role Supabase client for runtime business operations.
+ * Requires an explicit DATABASE_URL.
+ * Prohibits superuser/service_role accounts in production runtime.
  */
 export function getPostgresPool(): Pool {
   assertServerOnly();
+  if (singletonPool) {
+    return singletonPool;
+  }
+
   const env = getServerEnv();
-  const databaseUrl = env.DATABASE_URL || 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
+  const databaseUrl = env.DATABASE_URL;
+
+  if (!databaseUrl) {
+    throw new Error(
+      '[CRITICAL CONFIG ERROR] PostgreSQL pool requires explicit DATABASE_URL. Implicit fallback connections are strictly prohibited.'
+    );
+  }
 
   assertDisposableDatabase(databaseUrl);
+
+  // In production, enforce that ordinary operations connect via restricted school_app_login role
+  if (process.env.NODE_ENV === 'production') {
+    try {
+      const parsedUrl = new URL(databaseUrl);
+      const username = decodeURIComponent(parsedUrl.username || '').toLowerCase();
+      const forbiddenRoles = ['postgres', 'supabase_admin', 'postgres_admin', 'root', 'service_role'];
+      if (forbiddenRoles.includes(username)) {
+        throw new Error(
+          `[SECURITY ERROR] Production runtime pool cannot connect as privileged user "${username}". Must use restricted login role "school_app_login".`
+        );
+      }
+    } catch (err: any) {
+      if (err.message.startsWith('[SECURITY ERROR]')) {
+        throw err;
+      }
+      // Malformed URL will fail in pg.Pool constructor
+    }
+  }
 
   if (!singletonPool) {
     singletonPool = new Pool({
@@ -39,27 +68,29 @@ export function getPostgresPool(): Pool {
 /**
  * Executes an isolated transaction with transaction-local actor context for RLS scoping.
  * Guarantees atomicity, automatic rollback on error, and strict cleanup of session variables upon return.
+ * Actor session is mandatory to prevent actorless queries against protected tables.
  */
 export async function withTransaction<T>(
-  actorSession: AuthenticatedUserSession | null,
+  actorSession: AuthenticatedUserSession,
   callback: (client: PoolClient) => Promise<T>
 ): Promise<T> {
+  if (!actorSession || !actorSession.staffId) {
+    throw new Error(
+      '[SECURITY ERROR] Cannot execute transaction: actorSession is mandatory for protected application operations.'
+    );
+  }
+
   const pool = getPostgresPool();
   const client = await pool.connect();
 
   try {
     await client.query('BEGIN');
 
-    if (actorSession) {
-      await client.query(
-        "SELECT set_config('app.current_staff_id', $1, true), set_config('app.current_role', $2, true)",
-        [actorSession.staffId, actorSession.role]
-      );
-    } else {
-      await client.query(
-        "SELECT set_config('app.current_staff_id', '', true), set_config('app.current_role', '', true)"
-      );
-    }
+    // Scoped transaction context (is_local = true per set_config 3rd parameter)
+    await client.query(
+      "SELECT set_config('app.current_staff_id', $1, true), set_config('app.current_role', $2, true)",
+      [actorSession.staffId, actorSession.role]
+    );
 
     const result = await callback(client);
     await client.query('COMMIT');
@@ -83,18 +114,61 @@ export async function withTransaction<T>(
 }
 
 /**
- * Executes a parameterized query within optional actor session context.
+ * Executes an isolated transaction for unauthenticated system operations (e.g. login credentials lookup).
+ * Prohibits accessing protected business tables without an active actor.
+ */
+export async function withSystemTransaction<T>(
+  callback: (client: PoolClient) => Promise<T>
+): Promise<T> {
+  const pool = getPostgresPool();
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+    // Clear actor context
+    await client.query(
+      "SELECT set_config('app.current_staff_id', '', true), set_config('app.current_role', '', true)"
+    );
+
+    const result = await callback(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackErr) {
+      logger.error('Failed to rollback system transaction', { error: String(rollbackErr) });
+    }
+    throw error;
+  } finally {
+    try {
+      await client.query('RESET ALL');
+    } catch {
+      // Ignore cleanup error if connection was terminated
+    }
+    client.release();
+  }
+}
+
+export async function runWithSessionOrSystem<T>(
+  session: AuthenticatedUserSession | undefined,
+  callback: (client: PoolClient) => Promise<T>
+): Promise<T> {
+  if (session && session.staffId) {
+    return withTransaction(session, callback);
+  }
+  return withSystemTransaction(callback);
+}
+
+/**
+ * Executes a parameterized query within mandatory actor session context.
  */
 export async function query<R extends QueryResultRow = any>(
   text: string,
   params: any[] = [],
-  actorSession?: AuthenticatedUserSession | null
+  actorSession?: AuthenticatedUserSession
 ): Promise<QueryResult<R>> {
-  if (actorSession) {
-    return withTransaction(actorSession, (client) => client.query<R>(text, params));
-  }
-  const pool = getPostgresPool();
-  return pool.query<R>(text, params);
+  return runWithSessionOrSystem(actorSession, (client) => client.query<R>(text, params));
 }
 
 /**

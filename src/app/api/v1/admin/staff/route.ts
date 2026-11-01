@@ -4,7 +4,7 @@ import { identityService } from '@/modules/identity-access/service';
 import { createStaffMemberSchema } from '@/validation/auth';
 import { formatErrorResponse } from '@/lib/errors';
 import { getOrCreateCorrelationId } from '@/lib/correlation';
-import { getAdminDbClient } from '@/infrastructure/db/supabase-admin';
+import { getRepositories } from '@/infrastructure/repositories';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,20 +24,15 @@ export async function GET(request: Request) {
     }> = [];
 
     try {
-      const adminDb = getAdminDbClient();
-      const { data, error } = await adminDb
-        .from('staff_members')
-        .select('id, full_name, email, role, is_active, created_at')
-        .order('created_at', { ascending: false });
-
-      if (!error && data) {
-        staffList = data.map((s: any) => ({
+      const staffMembers = await getRepositories().identity.listStaff();
+      if (staffMembers && staffMembers.length > 0) {
+        staffList = staffMembers.map((s: any) => ({
           id: s.id,
-          fullName: s.full_name,
+          fullName: s.fullName ?? s.full_name,
           email: s.email,
           role: s.role,
-          isActive: s.is_active,
-          createdAt: s.created_at,
+          isActive: s.isActive ?? s.is_active,
+          createdAt: s.createdAt ?? s.created_at,
         }));
       }
     } catch {

@@ -2,7 +2,7 @@ import 'server-only';
 import { cookies } from 'next/headers';
 import { AuthenticatedUserSession, StaffRole } from '../modules/identity-access/types';
 import { verifySessionToken, SESSION_COOKIE_NAME, ACADEMIC_YEAR_COOKIE_NAME } from '../lib/auth/token';
-import { getAdminDbClient } from '../infrastructure/db/supabase-admin';
+import { getRepositories } from '../infrastructure/repositories';
 import { logger } from '../lib/logger';
 
 /**
@@ -33,21 +33,16 @@ export async function getServerSession(): Promise<AuthenticatedUserSession | nul
     let actualFullName = sessionPayload.fullName;
 
     try {
-      const adminDb = getAdminDbClient();
-      const { data: staff, error } = await adminDb
-        .from('staff_members')
-        .select('id, full_name, email, role, is_active')
-        .eq('id', sessionPayload.staffId)
-        .single();
-
-      if (!error && staff) {
-        if (!staff.is_active) {
+      const staff = await getRepositories().identity.getStaffById(sessionPayload.staffId);
+      if (staff) {
+        const staffIsActive = staff.isActive ?? staff.is_active;
+        if (!staffIsActive) {
           logger.warn('Session rejected: staff member has been deactivated', { staffId: staff.id });
-          return null; // Inactive accounts cannot continue using the system
+          return null;
         }
-        isActive = staff.is_active;
+        isActive = staffIsActive;
         actualRole = staff.role as StaffRole;
-        actualFullName = staff.full_name;
+        actualFullName = staff.fullName ?? staff.full_name;
       }
     } catch {
       // In isolated tests without DB, use sessionPayload directly
@@ -80,12 +75,12 @@ export async function getServerSession(): Promise<AuthenticatedUserSession | nul
       email: sessionPayload.email,
       fullName: actualFullName,
       role: actualRole,
-      isActive: true,
+      isActive,
       activeAcademicYearId: academicYearId,
       activeAcademicYearLabel: academicYearLabel,
     };
-  } catch (err) {
-    logger.error('Failed to resolve server session', undefined, err as Error);
+  } catch (error) {
+    logger.error('Failed to resolve server session', { error: String(error) });
     return null;
   }
 }

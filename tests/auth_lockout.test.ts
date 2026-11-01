@@ -6,6 +6,7 @@ describe('User Account Lockout Controls (US-01 AC3)', () => {
   const targetEmail = 'accounts@school-demo.example';
 
   beforeEach(async () => {
+    identityService.resetForTesting();
     clearAllLockouts();
     await initializeDemoCredentials();
   });

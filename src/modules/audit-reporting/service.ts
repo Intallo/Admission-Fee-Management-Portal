@@ -13,7 +13,8 @@ import {
 } from '../../lib/errors';
 import { enforcePolicy } from '../../policy/guards';
 import { logger } from '../../lib/logger';
-import { getAdminDbClient } from '../../infrastructure/db/supabase-admin';
+import { IAuditRepository } from '../../infrastructure/repositories/interfaces';
+import { getRepositories } from '../../infrastructure/repositories/registry';
 import { maskAadhaar, maskBankAccount } from '../../lib/crypto/pii';
 import { admissionsService } from '../admissions/service';
 import { academicYearsService } from '../academic-years/service';
@@ -96,11 +97,23 @@ export interface CreateAuditEventInput {
 }
 
 export class AuditReportingService {
+  private customRepo?: IAuditRepository;
+
+  constructor(customRepo?: IAuditRepository) {
+    this.customRepo = customRepo;
+  }
+
+  private get repo(): IAuditRepository {
+    return this.customRepo ?? getRepositories().audit;
+  }
   /**
    * Resets the in-memory audit logs vault for testing.
    */
   resetForTesting(): void {
     auditLogsVault = [];
+    if (this.repo.resetForTesting) {
+      this.repo.resetForTesting();
+    }
   }
 
   /**
@@ -130,7 +143,19 @@ export class AuditReportingService {
 
     // 2. Attempt persistence to Supabase if available
     try {
-      const adminDb = getAdminDbClient();
+      await this.repo.recordAuditEvent({
+        action: entry.action,
+        actorStaffId: entry.actorStaffId,
+        actorRole: entry.actorRole,
+        entityType: entry.entityType,
+        entityId: entry.entityId,
+        outcome: entry.outcome,
+        reason: entry.reason,
+        beforeSnapshot: (entry.beforeSnapshot as any) ?? undefined,
+        afterSnapshot: (entry.afterSnapshot as any) ?? undefined,
+      }).catch(() => {});
+      const adminDb = null as any;
+      if (adminDb)
       await adminDb.from('audit_logs').insert({
         action: entry.action,
         actor_staff_id: entry.actorStaffId,

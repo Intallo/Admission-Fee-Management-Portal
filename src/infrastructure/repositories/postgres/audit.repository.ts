@@ -5,7 +5,7 @@ import { AuditLogEntryDTO } from '../../../modules/audit-reporting/types';
 import { randomUUID } from 'crypto';
 
 export class PostgresAuditRepository implements IAuditRepository {
-  async logAction(entry: AuditLogEntryDTO, session?: AuthenticatedUserSession): Promise<void> {
+  async logAction(entry: any, session?: AuthenticatedUserSession): Promise<void> {
     const id = entry.id || randomUUID();
     const nowIso = entry.createdAt || new Date().toISOString();
 
@@ -26,8 +26,13 @@ export class PostgresAuditRepository implements IAuditRepository {
         entry.reason || null,
         nowIso,
       ],
-      session
+      session as any
     );
+  }
+
+  async recordAuditEvent(input: any, session?: AuthenticatedUserSession): Promise<any> {
+    await this.logAction(input, session);
+    return input;
   }
 
   async getLogs(
@@ -38,7 +43,7 @@ export class PostgresAuditRepository implements IAuditRepository {
       limit?: number;
       offset?: number;
     },
-    session: AuthenticatedUserSession
+    session?: AuthenticatedUserSession
   ): Promise<{ data: AuditLogEntryDTO[]; total: number }> {
     const conditions: string[] = [];
     const params: any[] = [];
@@ -62,7 +67,7 @@ export class PostgresAuditRepository implements IAuditRepository {
     const countRes = await query(
       `select count(*)::int as total from public.audit_logs ${where}`,
       params,
-      session
+      session as any
     );
     const total = countRes.rows[0]?.total || 0;
 
@@ -77,7 +82,7 @@ export class PostgresAuditRepository implements IAuditRepository {
        order by a.created_at desc
        limit $${pIdx++} offset $${pIdx++}`,
       [...params, limit, offset],
-      session
+      session as any
     );
 
     const data: AuditLogEntryDTO[] = listRes.rows.map((r) => ({
