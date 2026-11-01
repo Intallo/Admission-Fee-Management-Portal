@@ -1,16 +1,21 @@
 ------------------------------------------------------------------------------------
 -- Rollback Migration: 20261101130000_verifiable_actor_and_auth_gateway.down.sql
--- Satisfies Milestone M8.3.2 Task 11:
+-- Satisfies Milestone M8.3.2 Task 11 & Milestone M8.3.3 Task 12:
 -- Restores valid previous actor-verification and numbering functions from Migration 8
 -- before dropping private.system_secrets so RLS policies remain functional.
 ------------------------------------------------------------------------------------
 
 -- 1. Drop Migration 9 auth gateway functions
+drop function if exists private.auth_create_security_profile(uuid, text, boolean);
 drop function if exists private.auth_update_password(uuid, text, boolean);
 drop function if exists private.auth_record_login_attempt(uuid, boolean, timestamptz);
+drop function if exists private.auth_get_security_profile(uuid, text);
 drop function if exists private.auth_get_security_profile(uuid);
 drop function if exists private.auth_lookup_staff_by_id(uuid);
 drop function if exists private.auth_lookup_staff_by_email(text);
+
+-- Re-grant permissions on staff_security_profiles expected by Migration 8 baseline
+grant select, insert, update on public.staff_security_profiles to school_app_user, school_app_login;
 
 -- 2. Drop Migration 9 2-argument numbering functions
 drop function if exists private.next_application_number(uuid);
