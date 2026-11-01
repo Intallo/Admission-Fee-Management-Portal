@@ -33,6 +33,7 @@ import { logger } from '../../lib/logger';
 import { certificatesService } from '../certificates-lctc/service';
 import { IStudentRecordsRepository } from '../../infrastructure/repositories/interfaces';
 import { getRepositories } from '../../infrastructure/repositories/registry';
+import { PostgresStudentRecordsRepository } from '../../infrastructure/repositories/postgres/student-records.repository';
 import { AdmissionNumber, toDecimalInrString } from '../shared/types';
 
 // In-memory vault for student status history (fallback/testing)
@@ -47,6 +48,20 @@ export class StudentRecordsService {
 
   private get repo(): IStudentRecordsRepository {
     return this.customRepo ?? getRepositories().studentRecords;
+  }
+
+  isPostgres(): boolean {
+    if (process.env.PERSISTENCE_MODE === 'postgres' || process.env.NODE_ENV === 'production') {
+      return true;
+    }
+    return this.repo instanceof PostgresStudentRecordsRepository;
+  }
+
+  async getStatusHistory(recordId: string, session?: AuthenticatedUserSession): Promise<any[]> {
+    if (this.isPostgres()) {
+      return await this.repo.getStatusHistory(recordId, session);
+    }
+    return studentStatusHistoryVault.get(recordId) || [];
   }
   /**
    * Resets status history for testing.
@@ -63,6 +78,16 @@ export class StudentRecordsService {
    * Strictly filters sensitive PII so unauthorized staff never receive sensitive data (R-06).
    */
   async searchStudents(
+    filter: StudentSearchFilterDTO,
+    session: AuthenticatedUserSession
+  ): Promise<{ data: StudentSearchItemDTO[]; total: number }> {
+    if (this.isPostgres()) {
+      return await this.repo.searchStudents(filter, session);
+    }
+    return this._inMemorySearchStudents(filter, session);
+  }
+
+  private async _inMemorySearchStudents(
     filter: StudentSearchFilterDTO,
     session: AuthenticatedUserSession
   ): Promise<{ data: StudentSearchItemDTO[]; total: number }> {
@@ -153,6 +178,17 @@ export class StudentRecordsService {
    * Retrieves single student profile with role-filtered tabs and PII access logging (US-31, R-06).
    */
   async getStudentProfile(
+    identifier: string,
+    requestedAcademicYearId: string | undefined,
+    session: AuthenticatedUserSession
+  ): Promise<StudentProfileDTO> {
+    if (this.isPostgres()) {
+      return await this.repo.getStudentProfile(identifier, session);
+    }
+    return this._inMemoryGetStudentProfile(identifier, requestedAcademicYearId, session);
+  }
+
+  private async _inMemoryGetStudentProfile(
     identifier: string,
     requestedAcademicYearId: string | undefined,
     session: AuthenticatedUserSession
@@ -333,6 +369,38 @@ export class StudentRecordsService {
    * Validates mandatory exit date and reason. Frees student's seat while preserving all records permanently.
    */
   async markStudentStatus(
+    identifier: string,
+    payload: MarkStudentStatusRequestDTO,
+    session: AuthenticatedUserSession
+  ): Promise<MarkStudentStatusResultDTO> {
+    enforcePolicy(session.role, 'students:mark_left');
+    if (this.isPostgres()) {
+      if (!payload.academicRecordId) throw new ValidationError('academicRecordId is required.');
+      if (!payload.newStatus || !['left', 'transferred', 'withdrawn'].includes(payload.newStatus)) {
+        throw new ValidationError('newStatus must be one of: "left", "transferred", "withdrawn".');
+      }
+      if (!payload.exitDate || !/^\d{4}-\d{2}-\d{2}$/.test(payload.exitDate)) {
+        throw new ValidationError('exitDate is mandatory and must follow format YYYY-MM-DD.');
+      }
+      if (!payload.exitReason || payload.exitReason.trim().length < 3) {
+        throw new ValidationError('exitReason is mandatory and must be at least 3 characters.');
+      }
+      const updated = await this.repo.updateStudentStatus(payload.academicRecordId, payload.newStatus, payload.exitReason.trim(), session);
+      return {
+        academicRecordId: updated.id,
+        studentId: updated.student_id,
+        previousStatus: 'admitted',
+        newStatus: payload.newStatus,
+        exitDate: payload.exitDate,
+        exitReason: payload.exitReason.trim(),
+        updatedBy: session.staffId,
+        updatedAt: new Date().toISOString(),
+      };
+    }
+    return this._inMemoryMarkStudentStatus(identifier, payload, session);
+  }
+
+  private async _inMemoryMarkStudentStatus(
     identifier: string,
     payload: MarkStudentStatusRequestDTO,
     session: AuthenticatedUserSession

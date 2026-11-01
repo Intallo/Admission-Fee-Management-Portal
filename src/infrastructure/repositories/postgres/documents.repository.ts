@@ -142,7 +142,7 @@ export class PostgresDocumentsRepository implements IDocumentsRepository {
                 dt.name as document_type_name, dt.code as document_type_code
          from public.student_documents d
          join public.document_types dt on dt.id = d.document_type_id
-         where d.admission_application_id = $1
+         where d.admission_application_id = $1 or d.student_id = $1
          order by d.uploaded_at asc`,
         [applicationId]
       );

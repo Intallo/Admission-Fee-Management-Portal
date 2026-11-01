@@ -112,3 +112,45 @@ As mandated by CTO Directive Phase 8.1, all 10 domain services operate over dura
    - Total test suites: **28 test files passed (100%)**.
    - Total test cases: **241 tests passed (100%)**.
    - Dedicated Phase 8.1 test suite `tests/phase8_1_durability_and_security.test.ts` (15/15 passed) confirms durability across re-instantiation, reprint counters, certificate snapshot freezing, staff lockout persistence, atomic rollback, and role forgery rejection.
+
+---
+
+## 6. Phase 8.2 Production Path Completion & Real PostgreSQL Verification
+
+As mandated by CTO Directive Phase 8.2, all lingering persistence gaps, actor spoofing vectors, and authentication bootstrap paradoxes have been systematically eliminated:
+
+1. **Cryptographically Verified Actor Context (Elimination of Caller Role Spoofing):**
+   - Migration `20261101130000_verifiable_actor_and_auth_gateway.sql` establishes `private.system_secrets` (revoked from `school_app_user` and `school_app_login`).
+   - `withTransaction` in `src/infrastructure/db/postgres-pool.ts` generates an HMAC-SHA256 signature (`app.actor_signature`) combining `staffId` and `role`.
+   - `private.current_actor_role()` cryptographically verifies this signature against the server signing secret. Direct callers or SQL injection attempts asserting arbitrary staff IDs or elevated roles are rejected with `NULL` (DENY ALL under RLS).
+   - Zero UUID placeholder session (`00000000-0000-0000-0000-000000000000`) has been completely eradicated across all PostgreSQL repositories.
+
+2. **Authentication Gateway in Schema `private` (Resolution of RLS Bootstrap Paradox):**
+   - Direct queries to `public.staff_members` and `staff_security_profiles` during login previously failed under RLS without actor context.
+   - Five dedicated `SECURITY DEFINER` gateway functions were provisioned:
+     - `private.auth_lookup_staff_by_email(text)`
+     - `private.auth_lookup_staff_by_id(uuid)`
+     - `private.auth_get_security_profile(uuid)`
+     - `private.auth_record_login_attempt(uuid, boolean, timestamptz)`
+     - `private.auth_update_password(uuid, text, boolean)`
+   - Granted specifically to `school_app_login` and `school_app_user`.
+   - `src/auth/session.ts` fails closed in production (`return null`) if staff lookup fails, is missing, or account is deactivated.
+
+3. **Complete Elimination of Module-Level Memory Vaults in Production:**
+   - **Admissions Service (`src/modules/admissions/service.ts`):** All production reads and writes route to `this.repo`. Single atomic transaction in `approveApplication` performs row locking on `public.sections`, capacity validation, admission number allocation, student academic record creation, fee assessment creation, status transition, and audit logging. Payment is explicitly not required for admission (DEC-01 / BR-37).
+   - **Student Records Service (`src/modules/student-records/service.ts`):** `searchStudents`, `getStudentProfile`, and `updateStudentStatus` route directly to `this.repo`. DPDP PII masking is enforced in SQL.
+   - **Documents Service (`src/modules/documents/service.ts`):** Uploads execute storage upload + database save with automatic storage object cleanup on metadata rollback. Download URLs call Supabase Storage `createSignedUrl` with fallback to cryptographically HMAC-signed tokens.
+   - **Audit Reporting Service (`src/modules/audit-reporting/service.ts`):** Writes directly to `public.audit_logs` via `this.repo.recordAuditEvent` and queries via `this.repo.getLogs`.
+
+4. **Academic-Year Scoped Monotonic Number Generators:**
+   - `receipt_number_counters` upgraded to composite primary key `(series_code, academic_year_id)`.
+   - Automatic annual rollover ensures sequential monotonicity within each academic year:
+     - Application: `{N}/{YYYY-YY}` (e.g. `161/2026-27`)
+     - Admission: `ADM-YYYY-NNNN` (e.g. `ADM-2026-0001`)
+     - Receipt: `RCT-YYYY-NNNNNN` (e.g. `RCT-2026-000001`)
+     - TC / LC: `TC-YYYY-NNNN` (e.g. `TC-2026-0001`)
+
+5. **Real PostgreSQL Integration Test Suite:**
+   - Implemented in `tests/postgres_integration.test.ts` covering all 16 mandatory integration scenarios.
+   - Total test suite: **29 test files passed (100%)**, **257 tests passed (100%)**.
+

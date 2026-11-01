@@ -42,6 +42,7 @@ import { feeConfigurationService } from '../fee-configuration/service';
 import { logger } from '../../lib/logger';
 import { IAdmissionsRepository } from '../../infrastructure/repositories/interfaces';
 import { getRepositories } from '../../infrastructure/repositories/registry';
+import { PostgresAdmissionsRepository } from '../../infrastructure/repositories/postgres/admissions.repository';
 
 export interface SectionEntity {
   id: string;
@@ -244,6 +245,13 @@ export class AdmissionsService {
   private get repo(): IAdmissionsRepository {
     return this.customRepo ?? getRepositories().admissions;
   }
+
+  isPostgres(): boolean {
+    if (process.env.PERSISTENCE_MODE === 'postgres' || process.env.NODE_ENV === 'production') {
+      return true;
+    }
+    return this.repo instanceof PostgresAdmissionsRepository;
+  }
   /**
    * Resets in-memory state for clean test isolation.
    */
@@ -392,6 +400,10 @@ export class AdmissionsService {
   ): Promise<AdmissionApplicationDetailDTO> {
     enforcePolicy(actorSession.role, 'admissions:create_draft');
 
+    if (this.isPostgres()) {
+      return await this.repo.createDraft(payload, actorSession);
+    }
+
     // 1. Verify academic year is writable (not closed)
     const academicYear = await academicYearsService.assertAcademicYearWritable(payload.academicYearId);
 
@@ -539,6 +551,17 @@ export class AdmissionsService {
     payload: UpdateAdmissionDraftDTO,
     actorSession: AuthenticatedUserSession
   ): Promise<AdmissionApplicationDetailDTO> {
+    if (this.isPostgres()) {
+      return await this.repo.updateDraft(applicationId, payload, actorSession);
+    }
+    return this._inMemoryUpdateDraft(applicationId, payload, actorSession);
+  }
+
+  private async _inMemoryUpdateDraft(
+    applicationId: string,
+    payload: UpdateAdmissionDraftDTO,
+    actorSession: AuthenticatedUserSession
+  ): Promise<AdmissionApplicationDetailDTO> {
     const record = applicationsVault.get(applicationId);
     if (!record) {
       throw new NotFoundError(`Admission application with ID "${applicationId}" not found.`);
@@ -631,6 +654,18 @@ export class AdmissionsService {
    * Runs completeness check and validates document checklist.
    */
   async submitApplication(
+    applicationId: string,
+    payload: { overrideMissingDocumentsReason?: string },
+    actorSession: AuthenticatedUserSession
+  ): Promise<AdmissionApplicationDetailDTO> {
+    enforcePolicy(actorSession.role, 'admissions:submit_verification');
+    if (this.isPostgres()) {
+      return await this.repo.submitApplication(applicationId, actorSession);
+    }
+    return this._inMemorySubmitApplication(applicationId, payload, actorSession);
+  }
+
+  private async _inMemorySubmitApplication(
     applicationId: string,
     payload: { overrideMissingDocumentsReason?: string },
     actorSession: AuthenticatedUserSession
@@ -736,6 +771,22 @@ export class AdmissionsService {
     actorSession: AuthenticatedUserSession
   ): Promise<AdmissionApplicationDetailDTO> {
     enforcePolicy(actorSession.role, 'admissions:approve_decision');
+    if (this.isPostgres()) {
+      return await this.repo.reviewApplication(
+        applicationId,
+        { action: 'on_hold', remarks: payload.reason, seatReservedUntil: payload.seatReservedUntil },
+        actorSession
+      );
+    }
+    return this._inMemoryPutApplicationOnHold(applicationId, payload, actorSession);
+  }
+
+  private async _inMemoryPutApplicationOnHold(
+    applicationId: string,
+    payload: { reason: string; seatReservedUntil?: string },
+    actorSession: AuthenticatedUserSession
+  ): Promise<AdmissionApplicationDetailDTO> {
+    enforcePolicy(actorSession.role, 'admissions:approve_decision');
 
     const record = applicationsVault.get(applicationId);
     if (!record) {
@@ -790,6 +841,22 @@ export class AdmissionsService {
     actorSession: AuthenticatedUserSession
   ): Promise<AdmissionApplicationDetailDTO> {
     enforcePolicy(actorSession.role, 'admissions:approve_decision');
+    if (this.isPostgres()) {
+      return await this.repo.reviewApplication(
+        applicationId,
+        { action: 'return_to_draft', remarks: reason },
+        actorSession
+      );
+    }
+    return this._inMemoryReturnToDraft(applicationId, reason, actorSession);
+  }
+
+  private async _inMemoryReturnToDraft(
+    applicationId: string,
+    reason: string,
+    actorSession: AuthenticatedUserSession
+  ): Promise<AdmissionApplicationDetailDTO> {
+    enforcePolicy(actorSession.role, 'admissions:approve_decision');
 
     const record = applicationsVault.get(applicationId);
     if (!record) {
@@ -836,6 +903,18 @@ export class AdmissionsService {
    * Rejects an application (Principal only, US-14 AC2).
    */
   async rejectApplication(
+    applicationId: string,
+    reason: string,
+    actorSession: AuthenticatedUserSession
+  ): Promise<AdmissionApplicationDetailDTO> {
+    enforcePolicy(actorSession.role, 'admissions:approve_decision');
+    if (this.isPostgres()) {
+      return await this.repo.rejectApplication(applicationId, { decisionReason: reason }, actorSession);
+    }
+    return this._inMemoryRejectApplication(applicationId, reason, actorSession);
+  }
+
+  private async _inMemoryRejectApplication(
     applicationId: string,
     reason: string,
     actorSession: AuthenticatedUserSession
@@ -895,6 +974,17 @@ export class AdmissionsService {
    * 5. Monotonic unique admission number sequence (ADM-YYYY-NNNN).
    */
   async approveApplication(
+    applicationId: string,
+    payload: { sectionId: string; remarks?: string },
+    actorSession: AuthenticatedUserSession
+  ): Promise<ApproveAdmissionResultDTO> {
+    if (this.isPostgres()) {
+      return await this.repo.approveApplication(applicationId, payload, actorSession);
+    }
+    return this._inMemoryApproveApplication(applicationId, payload, actorSession);
+  }
+
+  private async _inMemoryApproveApplication(
     applicationId: string,
     payload: { sectionId: string; remarks?: string },
     actorSession: AuthenticatedUserSession
@@ -1156,6 +1246,18 @@ export class AdmissionsService {
     applicationId: string,
     actorSession: AuthenticatedUserSession
   ): Promise<AdmissionApplicationDetailDTO> {
+    if (this.isPostgres()) {
+      const res = await this.repo.getApplicationById(applicationId, actorSession);
+      if (!res) throw new NotFoundError(`Admission application with ID "${applicationId}" not found.`);
+      return res;
+    }
+    return this._inMemoryGetApplicationById(applicationId, actorSession);
+  }
+
+  private async _inMemoryGetApplicationById(
+    applicationId: string,
+    actorSession: AuthenticatedUserSession
+  ): Promise<AdmissionApplicationDetailDTO> {
     const record = applicationsVault.get(applicationId);
     if (!record) {
       throw new NotFoundError(`Admission application with ID "${applicationId}" not found.`);
@@ -1169,6 +1271,16 @@ export class AdmissionsService {
    * Strips/masks sensitive PII for non-authorized roles (Accounts Officer, SysAdmin).
    */
   async listApplications(
+    filters: ApplicationListFilterDTO,
+    actorSession: AuthenticatedUserSession
+  ): Promise<ApplicationListResponseDTO> {
+    if (this.isPostgres()) {
+      return await this.repo.listApplications(filters, actorSession);
+    }
+    return this._inMemoryListApplications(filters, actorSession);
+  }
+
+  private async _inMemoryListApplications(
     filters: ApplicationListFilterDTO,
     actorSession: AuthenticatedUserSession
   ): Promise<ApplicationListResponseDTO> {
@@ -1421,6 +1533,34 @@ export class AdmissionsService {
   }
 
   // --- Cross-module Accessors for Fees Ledger & Receipts ---
+
+  async getAcademicRecordAsync(id: string, session?: AuthenticatedUserSession): Promise<InternalAcademicRecord | undefined> {
+    if (this.isPostgres()) {
+      return await this.repo.getAcademicRecordById(id, session);
+    }
+    return this.getAcademicRecord(id);
+  }
+
+  async getAllAcademicRecordsAsync(session?: AuthenticatedUserSession): Promise<InternalAcademicRecord[]> {
+    if (this.isPostgres()) {
+      return await this.repo.getAllAcademicRecords(session);
+    }
+    return this.getAllAcademicRecords();
+  }
+
+  async getStudentByIdAsync(id: string, session?: AuthenticatedUserSession): Promise<StudentDemographicsDTO | undefined> {
+    if (this.isPostgres()) {
+      return await this.repo.getStudentById(id, session);
+    }
+    return this.getStudentById(id);
+  }
+
+  async getApplicationByRecordIdAsync(academicRecordId: string, session?: AuthenticatedUserSession): Promise<InternalApplicationRecord | undefined> {
+    if (this.isPostgres()) {
+      return await this.repo.getApplicationByRecordId(academicRecordId, session);
+    }
+    return this.getApplicationByRecordId(academicRecordId);
+  }
 
   getAcademicRecord(id: string): InternalAcademicRecord | undefined {
     return academicRecordsVault.get(id);

@@ -15,6 +15,7 @@ import { enforcePolicy } from '../../policy/guards';
 import { logger } from '../../lib/logger';
 import { IAuditRepository } from '../../infrastructure/repositories/interfaces';
 import { getRepositories } from '../../infrastructure/repositories/registry';
+import { PostgresAuditRepository } from '../../infrastructure/repositories/postgres/audit.repository';
 import { maskAadhaar, maskBankAccount } from '../../lib/crypto/pii';
 import { admissionsService } from '../admissions/service';
 import { academicYearsService } from '../academic-years/service';
@@ -106,6 +107,13 @@ export class AuditReportingService {
   private get repo(): IAuditRepository {
     return this.customRepo ?? getRepositories().audit;
   }
+
+  isPostgres(): boolean {
+    if (process.env.PERSISTENCE_MODE === 'postgres' || process.env.NODE_ENV === 'production') {
+      return true;
+    }
+    return this.repo instanceof PostgresAuditRepository;
+  }
   /**
    * Resets the in-memory audit logs vault for testing.
    */
@@ -137,6 +145,31 @@ export class AuditReportingService {
       reason: input.reason ?? null,
       createdAt: new Date().toISOString(),
     };
+
+    if (this.isPostgres()) {
+      await this.repo.recordAuditEvent({
+        action: entry.action,
+        actorStaffId: entry.actorStaffId,
+        actorRole: entry.actorRole,
+        entityType: entry.entityType,
+        entityId: entry.entityId,
+        outcome: entry.outcome,
+        reason: entry.reason,
+        beforeSnapshot: (entry.beforeSnapshot as any) ?? undefined,
+        afterSnapshot: (entry.afterSnapshot as any) ?? undefined,
+        createdAt: entry.createdAt,
+      });
+
+      logger.info(`Audit Event: ${entry.action}`, {
+        actorStaffId: entry.actorStaffId,
+        actorRole: entry.actorRole,
+        entityType: entry.entityType,
+        entityId: entry.entityId,
+        outcome: entry.outcome,
+      });
+
+      return entry;
+    }
 
     // 1. Save in-memory
     auditLogsVault.unshift(entry); // newest first
@@ -190,6 +223,19 @@ export class AuditReportingService {
     session: AuthenticatedUserSession
   ): Promise<{ data: AuditLogEntryDTO[]; total: number }> {
     enforcePolicy(session.role, 'audit:view_logs');
+
+    if (this.isPostgres()) {
+      return await this.repo.getLogs(
+        {
+          staffId: filter.actorStaffId,
+          action: filter.action,
+          entityType: filter.entityType,
+          limit: filter.limit,
+          offset: filter.offset,
+        },
+        session
+      );
+    }
 
     let logs = [...auditLogsVault];
 

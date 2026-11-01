@@ -110,8 +110,8 @@ describe('Phase 8: Durable Persistence & Runtime Least-Privilege Remediation', (
 
         expect(mockClient.query).toHaveBeenCalledWith('BEGIN');
         expect(mockClient.query).toHaveBeenCalledWith(
-          "SELECT set_config('app.current_staff_id', $1, true), set_config('app.current_role', $2, true)",
-          [accountantSession.staffId, accountantSession.role]
+          "SELECT set_config('app.current_staff_id', $1, true), set_config('app.current_role', $2, true), set_config('app.actor_signature', $3, true)",
+          [accountantSession.staffId, accountantSession.role, expect.any(String)]
         );
         expect(mockClient.query).toHaveBeenCalledWith('COMMIT');
         expect(mockClient.query).toHaveBeenCalledWith('RESET ALL');

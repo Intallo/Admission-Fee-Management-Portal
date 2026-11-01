@@ -73,8 +73,10 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
     _academicYearId?: string,
     session?: AuthenticatedUserSession
   ): Promise<StudentFeeSummaryDTO> {
-    const runner = session ? (cb: any) => withTransaction(session, cb) : (cb: any) => withTransaction({ staffId: '00000000-0000-0000-0000-000000000000', role: 'principal', email: 'system@school.internal', fullName: 'System' } as any, cb);
-    return (runner as any)(async (client: any) => {
+    if (!session || !session.staffId) {
+      throw new AuthorizationError('Authenticated user session is required for fee operations.');
+    }
+    return withTransaction(session, async (client: any) => {
       // 1. Fetch student assessment header
       const assessRes = await client.query(
         `select a.id, a.assessment_number, a.status, a.student_academic_record_id, r.student_id, r.admission_number,
@@ -567,8 +569,10 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
   }
 
   async getPaymentById(paymentId: string, session?: AuthenticatedUserSession): Promise<InternalPaymentRecord | undefined> {
-    const runner = session ? (cb: any) => withTransaction(session, cb) : (cb: any) => withTransaction({ staffId: '00000000-0000-0000-0000-000000000000', role: 'principal' } as any, cb);
-    return (runner as any)(async (client: any) => {
+    if (!session || !session.staffId) {
+      throw new AuthorizationError('Authenticated user session is required for fee operations.');
+    }
+    return withTransaction(session, async (client: any) => {
       const res = await client.query(
         `select * from public.payments where id = $1`,
         [paymentId]
@@ -596,8 +600,10 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
   }
 
   async listPaymentsForRecord(studentAcademicRecordId: string, session?: AuthenticatedUserSession): Promise<InternalPaymentRecord[]> {
-    const runner = session ? (cb: any) => withTransaction(session, cb) : (cb: any) => withTransaction({ staffId: '00000000-0000-0000-0000-000000000000', role: 'principal' } as any, cb);
-    return (runner as any)(async (client: any) => {
+    if (!session || !session.staffId) {
+      throw new AuthorizationError('Authenticated user session is required for fee operations.');
+    }
+    return withTransaction(session, async (client: any) => {
       const res = await client.query(
         `select * from public.payments where student_academic_record_id = $1 order by created_at desc`,
         [studentAcademicRecordId]
@@ -623,8 +629,10 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
   }
 
   async getAllAllocations(session?: AuthenticatedUserSession): Promise<InternalPaymentAllocation[]> {
-    const runner = session ? (cb: any) => withTransaction(session, cb) : (cb: any) => withTransaction({ staffId: '00000000-0000-0000-0000-000000000000', role: 'principal' } as any, cb);
-    return (runner as any)(async (client: any) => {
+    if (!session || !session.staffId) {
+      throw new AuthorizationError('Authenticated user session is required for fee operations.');
+    }
+    return withTransaction(session, async (client: any) => {
       const res = await client.query(
         `select * from public.payment_allocations order by created_at desc`
       );
@@ -639,8 +647,10 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
   }
 
   async getAllAdjustments(session?: AuthenticatedUserSession): Promise<InternalFeeAdjustment[]> {
-    const runner = session ? (cb: any) => withTransaction(session, cb) : (cb: any) => withTransaction({ staffId: '00000000-0000-0000-0000-000000000000', role: 'principal' } as any, cb);
-    return (runner as any)(async (client: any) => {
+    if (!session || !session.staffId) {
+      throw new AuthorizationError('Authenticated user session is required for fee operations.');
+    }
+    return withTransaction(session, async (client: any) => {
       const res = await client.query(
         `select * from public.fee_adjustments order by created_at desc`
       );

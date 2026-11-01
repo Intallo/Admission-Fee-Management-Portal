@@ -22,8 +22,10 @@ export class PostgresReceiptsRepository implements IReceiptsRepository {
     academicYearId?: string,
     session?: AuthenticatedUserSession
   ): Promise<ReceiptNumber> {
-    const runner = session ? (cb: any) => withTransaction(session, cb) : (cb: any) => withTransaction({ staffId: '00000000-0000-0000-0000-000000000000', role: 'principal' } as any, cb);
-    return (runner as any)(async (client: any) => {
+    if (!session || !session.staffId) {
+      throw new AuthorizationError('Authenticated user session is required for receipt operations.');
+    }
+    return withTransaction(session, async (client: any) => {
       const res = await client.query(
         `select private.next_receipt_number($1) as num`,
         [series || 'RCT']
@@ -36,8 +38,10 @@ export class PostgresReceiptsRepository implements IReceiptsRepository {
     receiptId: string,
     session?: AuthenticatedUserSession
   ): Promise<ReceiptDTO | undefined> {
-    const runner = session ? (cb: any) => withTransaction(session, cb) : (cb: any) => withTransaction({ staffId: '00000000-0000-0000-0000-000000000000', role: 'principal' } as any, cb);
-    return (runner as any)(async (client: any) => {
+    if (!session || !session.staffId) {
+      throw new AuthorizationError('Authenticated user session is required for receipt operations.');
+    }
+    return withTransaction(session, async (client: any) => {
       const res = await client.query(
         `select r.*, p.amount as payment_amount, p.payer_name, p.method as payment_method, p.reference_number
          from public.receipts r
@@ -69,8 +73,10 @@ export class PostgresReceiptsRepository implements IReceiptsRepository {
     paymentId: string,
     session?: AuthenticatedUserSession
   ): Promise<ReceiptDTO | undefined> {
-    const runner = session ? (cb: any) => withTransaction(session, cb) : (cb: any) => withTransaction({ staffId: '00000000-0000-0000-0000-000000000000', role: 'principal' } as any, cb);
-    return (runner as any)(async (client: any) => {
+    if (!session || !session.staffId) {
+      throw new AuthorizationError('Authenticated user session is required for receipt operations.');
+    }
+    return withTransaction(session, async (client: any) => {
       const res = await client.query(
         `select * from public.receipts where payment_id = $1`,
         [paymentId]
@@ -99,8 +105,10 @@ export class PostgresReceiptsRepository implements IReceiptsRepository {
     studentAcademicRecordId: string,
     session?: AuthenticatedUserSession
   ): Promise<ReceiptDTO[]> {
-    const runner = session ? (cb: any) => withTransaction(session, cb) : (cb: any) => withTransaction({ staffId: '00000000-0000-0000-0000-000000000000', role: 'principal' } as any, cb);
-    return (runner as any)(async (client: any) => {
+    if (!session || !session.staffId) {
+      throw new AuthorizationError('Authenticated user session is required for receipt operations.');
+    }
+    return withTransaction(session, async (client: any) => {
       const res = await client.query(
         `select * from public.receipts
          where student_academic_record_id = $1
@@ -131,8 +139,10 @@ export class PostgresReceiptsRepository implements IReceiptsRepository {
     receipt: ReceiptDTO,
     session?: AuthenticatedUserSession
   ): Promise<ReceiptDTO> {
-    const runner = session ? (cb: any) => withTransaction(session, cb) : (cb: any) => withTransaction({ staffId: '00000000-0000-0000-0000-000000000000', role: 'principal' } as any, cb);
-    return (runner as any)(async (client: any) => {
+    if (!session || !session.staffId) {
+      throw new AuthorizationError('Authenticated user session is required for receipt operations.');
+    }
+    return withTransaction(session, async (client: any) => {
       await client.query(
         `insert into public.receipts (
            id, receipt_number, payment_id, category,

@@ -43,8 +43,15 @@ export async function getServerSession(): Promise<AuthenticatedUserSession | nul
         isActive = staffIsActive;
         actualRole = staff.role as StaffRole;
         actualFullName = staff.fullName ?? staff.full_name;
+      } else if (process.env.NODE_ENV === 'production' || process.env.PERSISTENCE_MODE === 'postgres') {
+        logger.warn('Session rejected in production: staff member record not found', { staffId: sessionPayload.staffId });
+        return null;
       }
-    } catch {
+    } catch (dbError) {
+      if (process.env.NODE_ENV === 'production' || process.env.PERSISTENCE_MODE === 'postgres') {
+        logger.error('Session lookup failed closed in production environment', { error: String(dbError), staffId: sessionPayload.staffId });
+        return null;
+      }
       // In isolated tests without DB, use sessionPayload directly
     }
 
