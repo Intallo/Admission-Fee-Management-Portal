@@ -503,7 +503,7 @@ begin
     v_year_id := '00000000-0000-0000-0000-000000000000';
     v_year_prefix := pg_catalog.to_char(pg_catalog.now() at time zone 'Asia/Kolkata', 'YYYY');
   else
-    v_year_prefix := pg_catalog.coalesce(pg_catalog.substring(v_year_label from 1 for 4), pg_catalog.to_char(pg_catalog.now() at time zone 'Asia/Kolkata', 'YYYY'));
+    v_year_prefix := pg_catalog.coalesce(pg_catalog.substring(v_year_label, 1, 4), pg_catalog.to_char(pg_catalog.now() at time zone 'Asia/Kolkata', 'YYYY'));
   end if;
 
   insert into public.receipt_number_counters as c (series_code, academic_year_id, next_value)
@@ -545,7 +545,7 @@ begin
     v_year_id := '00000000-0000-0000-0000-000000000000';
     v_year_prefix := pg_catalog.to_char(pg_catalog.now() at time zone 'Asia/Kolkata', 'YYYY');
   else
-    v_year_prefix := pg_catalog.coalesce(pg_catalog.substring(v_year_label from 1 for 4), pg_catalog.to_char(pg_catalog.now() at time zone 'Asia/Kolkata', 'YYYY'));
+    v_year_prefix := pg_catalog.coalesce(pg_catalog.substring(v_year_label, 1, 4), pg_catalog.to_char(pg_catalog.now() at time zone 'Asia/Kolkata', 'YYYY'));
   end if;
 
   insert into public.receipt_number_counters as c (series_code, academic_year_id, next_value)
@@ -587,7 +587,7 @@ begin
     v_year_id := '00000000-0000-0000-0000-000000000000';
     v_year_prefix := pg_catalog.to_char(pg_catalog.now() at time zone 'Asia/Kolkata', 'YYYY');
   else
-    v_year_prefix := pg_catalog.coalesce(pg_catalog.substring(v_year_label from 1 for 4), pg_catalog.to_char(pg_catalog.now() at time zone 'Asia/Kolkata', 'YYYY'));
+    v_year_prefix := pg_catalog.coalesce(pg_catalog.substring(v_year_label, 1, 4), pg_catalog.to_char(pg_catalog.now() at time zone 'Asia/Kolkata', 'YYYY'));
   end if;
 
   insert into public.receipt_number_counters as c (series_code, academic_year_id, next_value)
