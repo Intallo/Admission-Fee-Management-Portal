@@ -74,7 +74,36 @@ psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -f supabase/tests/us33_ac2_le
 psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -f supabase/tests/verification.sql
 ```
 
-### 3.2 Production / Staging Deployment Runbook (Client Responsibility)
+### 3.2 Disposable CI & Containerized Test Environments (Milestone M8.3.1)
+When running tests against a clean, vanilla PostgreSQL container (e.g., in GitHub Actions CI or a local Docker `postgres:15-alpine` container), the database lacks pre-provisioned Supabase objects (roles, `auth` schema, `storage` schema).
+
+The repository provides a dedicated, isolated test bootstrap and migration runner:
+- **Test Bootstrap:** [`scripts/ci/00_supabase_test_compat_bootstrap.sql`](file:///scripts/ci/00_supabase_test_compat_bootstrap.sql)
+- **CI Migration Runner:** [`scripts/ci/run-migrations.sh`](file:///scripts/ci/run-migrations.sh)
+- **Programmatic Runner:** [`scripts/ci/migration-runner.ts`](file:///scripts/ci/migration-runner.ts)
+
+#### Supabase Dependencies Inventory for Test Environments:
+1. **Roles:** `anon`, `authenticated`, `service_role` (with `bypassrls`), `supabase_admin` (superuser), `authenticator` (proxy role).
+2. **Schemas:** `auth` and `storage`.
+3. **Compatibility Tables:**
+   - `auth.users`: Satisfies `public.staff_members.auth_user_id REFERENCES auth.users(id)`.
+   - `storage.buckets` & `storage.objects`: Satisfies migration `20261101000000_provision_private_storage_buckets.sql`.
+4. **Helper Functions:** `auth.uid()`, `auth.role()`, `auth.email()`, `auth.jwt()`.
+5. **Extensions:** `uuid-ossp`, `pgcrypto`.
+
+#### Execution Command in CI:
+```bash
+chmod +x scripts/ci/run-migrations.sh
+./scripts/ci/run-migrations.sh
+```
+
+> [!WARNING]
+> **Test Bootstrap Isolation & Production Safeguards:**
+> - `scripts/ci/00_supabase_test_compat_bootstrap.sql` is strictly quarantined in `scripts/ci/` and is **never** placed in `supabase/migrations/`.
+> - It contains a fail-closed guard that aborts execution if `app.environment = 'production'`.
+> - It must **never** be applied to client production databases or the retained Supabase project (`fjrfyzamiirqzitdchkz`).
+
+### 3.3 Production / Staging Deployment Runbook (Client Responsibility)
 When applying migrations to client-managed staging or production PostgreSQL instances:
 ```powershell
 # Pre-requisite: Set DATABASE_URL to client database
