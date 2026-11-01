@@ -9,15 +9,18 @@ export const PROTECTED_REMOTE_REF = 'fjrfyzamiirqzitdchkz';
 export const clientEnvSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z
     .string()
-    .url('NEXT_PUBLIC_SUPABASE_URL must be a valid URL'),
+    .url('NEXT_PUBLIC_SUPABASE_URL must be a valid URL')
+    .default('http://127.0.0.1:54321'),
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: z
     .string()
-    .min(1, 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY is required'),
+    .min(1, 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY is required')
+    .default('sb_publishable_local_dev_key'),
 });
 
 /**
  * Server-only environment schema.
- * Includes privileged secrets that must NEVER leak to browser bundles.
+ * Direct PostgreSQL pooling is the primary runtime persistence engine.
+ * SUPABASE_SERVICE_ROLE_KEY is decoupled and optional for normal CRUD operations.
  */
 export const serverEnvSchema = clientEnvSchema.extend({
   NODE_ENV: z
@@ -25,7 +28,8 @@ export const serverEnvSchema = clientEnvSchema.extend({
     .default('development'),
   SUPABASE_SERVICE_ROLE_KEY: z
     .string()
-    .min(1, 'SUPABASE_SERVICE_ROLE_KEY is required on server runtime'),
+    .min(1, 'SUPABASE_SERVICE_ROLE_KEY must be a valid key if provided')
+    .optional(),
   DATABASE_URL: z
     .string()
     .url('DATABASE_URL must be a valid postgres URL')

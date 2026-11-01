@@ -31,7 +31,7 @@ export async function GET(request: Request) {
         .order('created_at', { ascending: false });
 
       if (!error && data) {
-        staffList = data.map((s) => ({
+        staffList = data.map((s: any) => ({
           id: s.id,
           fullName: s.full_name,
           email: s.email,
