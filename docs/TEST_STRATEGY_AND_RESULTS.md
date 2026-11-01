@@ -58,7 +58,7 @@ flowchart TD
 
 ---
 
-## 2. Comprehensive Automated Test Inventory (27 Test Files)
+## 2. Comprehensive Automated Test Inventory (30 Test Files)
 
 | Test File | Category | Focus Area & Verified Invariants | Tests Passed | Status |
 |---|---|---|:---:|:---:|
@@ -91,7 +91,8 @@ flowchart TD
 | [`tests/phase8_persistence_and_privilege.test.ts`](file:///tests/phase8_persistence_and_privilege.test.ts) | Durable Persistence & Privilege | Phase 8 remediation verifying fail-closed production boundary on missing DATABASE_URL, remote database safety guard, PostgreSQL repository provisioning, transaction-local actor context scoping (`app.current_staff_id`, `app.current_role`), automatic rollback and `RESET ALL` connection cleanup, and in-memory test fake isolation. | 7 | **PASS** |
 | [`tests/phase8_1_durability_and_security.test.ts`](file:///tests/phase8_1_durability_and_security.test.ts) | Durability & Security | Phase 8.1 remediation verifying rejection of in-memory Maps in production, fail-closed database connectivity, transaction atomicity, signed session integrity, and zero silent exception catching. | 15 | **PASS** |
 | [`tests/postgres_integration.test.ts`](file:///tests/postgres_integration.test.ts) | PostgreSQL Production Integration | Phase 8.2 end-to-end integration suite verifying all 16 production scenarios: Admissions atomic approval, Student Records search/PII masking/status transition, Document uploads & signed URLs, Audit log persistence, Authentication via `private.auth_*` gateways under RLS, cryptographic HMAC actor signatures, rejection of dummy sessions, and composite `(series_code, academic_year_id)` numbering with annual rollover. | 16 | **PASS** |
-| **TOTAL** | **Full Portal Suite** | **29 Test Suites Covering 100% of Application Surface** | **257** | **ALL PASS** |
+| [`tests/postgres_ci_foundation.test.ts`](file:///tests/postgres_ci_foundation.test.ts) | PostgreSQL CI Foundation & Migrations | Phase 8.3.1 clean database migration suite: chronological sequence verification across all 9 migrations, stop-immediately error propagation on SQL failures (`ON_ERROR_STOP=1`), Supabase compatibility role/schema verification (`anon`, `authenticated`, `service_role`, `supabase_admin`, `authenticator`, `auth.users`, `storage.buckets`), and test bootstrap quarantine safeguards. | 14 | **PASS** |
+| **TOTAL** | **Full Portal Suite** | **30 Test Suites Covering 100% of Application Surface** | **271** | **ALL PASS** |
 
 ---
 

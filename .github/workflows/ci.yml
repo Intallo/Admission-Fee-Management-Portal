@@ -7,6 +7,7 @@ on:
       - 'feat/**'
       - 'task/**'
       - 'feature/**'
+      - 'fix/**'
   pull_request:
     branches:
       - main
@@ -55,15 +56,16 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y postgresql-client
 
-      - name: Apply Database Migrations
+      - name: Bootstrap Test Database & Apply Migrations
         run: |
-          export PGPASSWORD=postgrespassword
-          for file in $(ls supabase/migrations/*.sql | sort); do
-            if [[ "$file" != *".down.sql" ]]; then
-              echo "==> Applying migration: $file"
-              psql -h localhost -U postgres -d school_test_db -v ON_ERROR_STOP=1 -f "$file"
-            fi
-          done
+          chmod +x scripts/ci/run-migrations.sh
+          ./scripts/ci/run-migrations.sh
+        env:
+          PGHOST: localhost
+          PGPORT: "5432"
+          PGUSER: postgres
+          PGPASSWORD: postgrespassword
+          PGDATABASE: school_test_db
 
       - name: Install Dependencies
         run: npm ci

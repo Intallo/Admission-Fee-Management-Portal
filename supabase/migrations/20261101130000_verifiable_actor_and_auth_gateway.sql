@@ -259,7 +259,7 @@ do $$
 declare
   v_default_year_id uuid;
 begin
-  select id into v_default_year_id from public.academic_years where state = 'current' limit 1;
+  select id into v_default_year_id from public.academic_years where status = 'current' limit 1;
   if v_default_year_id is not null then
     update public.receipt_number_counters
     set academic_year_id = v_default_year_id
@@ -303,7 +303,7 @@ begin
   v_year_id := p_academic_year_id;
   if v_year_id is null then
     select id, label into v_year_id, v_year_label
-    from public.academic_years where state = 'current' limit 1;
+    from public.academic_years where status = 'current' limit 1;
   else
     select label into v_year_label
     from public.academic_years where id = v_year_id;
@@ -345,7 +345,7 @@ begin
   v_year_id := p_academic_year_id;
   if v_year_id is null then
     select id, label into v_year_id, v_year_label
-    from public.academic_years where state = 'current' limit 1;
+    from public.academic_years where status = 'current' limit 1;
   else
     select label into v_year_label
     from public.academic_years where id = v_year_id;
@@ -387,7 +387,7 @@ begin
   v_year_id := p_academic_year_id;
   if v_year_id is null then
     select id, label into v_year_id, v_year_label
-    from public.academic_years where state = 'current' limit 1;
+    from public.academic_years where status = 'current' limit 1;
   else
     select label into v_year_label
     from public.academic_years where id = v_year_id;
@@ -427,7 +427,7 @@ begin
   v_year_id := p_academic_year_id;
   if v_year_id is null then
     select id, label into v_year_id, v_year_label
-    from public.academic_years where state = 'current' limit 1;
+    from public.academic_years where status = 'current' limit 1;
   else
     select label into v_year_label
     from public.academic_years where id = v_year_id;
