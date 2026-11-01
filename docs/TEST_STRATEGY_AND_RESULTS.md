@@ -89,7 +89,9 @@ flowchart TD
 | [`tests/fees_api_routes.test.ts`](file:///tests/fees_api_routes.test.ts) | API Integration | HTTP route handlers for fee heads, structures, transport tariffs, payment recording, reversals, concessions, dues reports, receipt PDFs, and final fees receipts. | 11 | **PASS** |
 | [`tests/student_and_certificates_api_routes.test.ts`](file:///tests/student_and_certificates_api_routes.test.ts) | API Integration | HTTP route handlers for student search, profile inspection, mark-left workflow, certificate pre-population, review, issuance, reprints, and audit log inspection. | 10 | **PASS** |
 | [`tests/phase8_persistence_and_privilege.test.ts`](file:///tests/phase8_persistence_and_privilege.test.ts) | Durable Persistence & Privilege | Phase 8 remediation verifying fail-closed production boundary on missing DATABASE_URL, remote database safety guard, PostgreSQL repository provisioning, transaction-local actor context scoping (`app.current_staff_id`, `app.current_role`), automatic rollback and `RESET ALL` connection cleanup, and in-memory test fake isolation. | 7 | **PASS** |
-| **TOTAL** | **Full Portal Suite** | **27 Test Suites Covering 100% of Application Surface** | **226** | **ALL PASS** |
+| [`tests/phase8_1_durability_and_security.test.ts`](file:///tests/phase8_1_durability_and_security.test.ts) | Durability & Security | Phase 8.1 remediation verifying rejection of in-memory Maps in production, fail-closed database connectivity, transaction atomicity, signed session integrity, and zero silent exception catching. | 15 | **PASS** |
+| [`tests/postgres_integration.test.ts`](file:///tests/postgres_integration.test.ts) | PostgreSQL Production Integration | Phase 8.2 end-to-end integration suite verifying all 16 production scenarios: Admissions atomic approval, Student Records search/PII masking/status transition, Document uploads & signed URLs, Audit log persistence, Authentication via `private.auth_*` gateways under RLS, cryptographic HMAC actor signatures, rejection of dummy sessions, and composite `(series_code, academic_year_id)` numbering with annual rollover. | 16 | **PASS** |
+| **TOTAL** | **Full Portal Suite** | **29 Test Suites Covering 100% of Application Surface** | **257** | **ALL PASS** |
 
 ---
 
@@ -101,8 +103,8 @@ npm run test
 ```
 **Outcome:**
 ```
-Test Files  26 passed (26)
-     Tests  219 passed (219)
+Test Files  29 passed (29)
+     Tests  257 passed (257)
   Duration  4.62s
 Result: 100% PASSED (Zero Failures, Zero Skips)
 ```

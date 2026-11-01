@@ -24,6 +24,7 @@ All schema modifications are tracked as version-controlled SQL files under `supa
 | **6** | `20261031000000_staff_auth_security.sql` | `20261031000000_staff_auth_security.down.sql` | **Module 1 Security Hardening:** Creates `public.staff_security_profiles` vault storing scrypt password hashes, failed login attempt counters, 15-minute lockout timestamps (`locked_until`), and `must_change_password` flag. Pre-populates security profiles for seeded staff accounts. |
 | **7** | `20261101000000_provision_private_storage_buckets.sql` | `20261101000000_provision_private_storage_buckets.down.sql` | **Storage Security Hardening:** Provisions private buckets (`admission-documents`, `receipts`, `certificates`) with `public = false`, file size limits, MIME type constraints, and RLS policies on `storage.objects`. |
 | **8** | `20261101120000_provision_school_app_login_and_rls.sql` | `20261101120000_provision_school_app_login_and_rls.down.sql` | **Phase 8 Remediation (F-01 & F-02):** Provisions dedicated PostgreSQL login role `school_app_login` as a member of `school_app_user`. Creates transaction-local context helpers `private.current_actor_role()` and `private.current_actor_staff_id()`. Establishes fail-closed Row-Level Security (RLS) across all 32 public tables. Strictly denies `student_sensitive_details` access to `accountant` and `system_admin` per DPDP Act. |
+| **9** | `20261101130000_verifiable_actor_and_auth_gateway.sql` | `20261101130000_verifiable_actor_and_auth_gateway.down.sql` | **Phase 8.2 Security & Numbering Gateway:** Provisions `private.system_secrets` and verifies cryptographic HMAC-SHA256 signature (`app.actor_signature`) in `private.current_actor_role()` to prevent session spoofing. Provisions 5 `SECURITY DEFINER` gateway functions in `private` schema for unauthenticated login/lockout/password lifecycle. Upgrades `public.receipt_number_counters` to composite `(series_code, academic_year_id)` key with atomic rollover for Application (`161/2026-27`), Admission (`ADM-YYYY-NNNN`), Receipt (`RCT-YYYY-NNNNNN`), and TC (`TC-YYYY-NNNN`). |
 
 ---
 
@@ -94,11 +95,15 @@ psql -h <CLIENT_DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/migrations
 # 5. Apply Migration 8 (school_app_login role & RLS)
 psql -h <CLIENT_DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/migrations/20261101120000_provision_school_app_login_and_rls.sql
 
-# 6. Provision school_app_login Password Out-of-Band (DBA action)
-# NEVER commit this password to version control!
-psql -h <CLIENT_DB_HOST> -p 5432 -U postgres -d <DB_NAME> -c "ALTER ROLE school_app_login WITH PASSWORD '{{STRONG_CLIENT_SUPPLIED_SECRET}}';"
+# 6. Apply Migration 9 (Verifiable Actor & Auth Gateway)
+psql -h <CLIENT_DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/migrations/20261101130000_verifiable_actor_and_auth_gateway.sql
 
-# 7. Verify post-migration integrity
+# 7. Provision school_app_login Password and System Secret Out-of-Band (DBA action)
+# NEVER commit this password or system secret to version control!
+psql -h <CLIENT_DB_HOST> -p 5432 -U postgres -d <DB_NAME> -c "ALTER ROLE school_app_login WITH PASSWORD '{{STRONG_CLIENT_SUPPLIED_SECRET}}';"
+psql -h <CLIENT_DB_HOST> -p 5432 -U postgres -d <DB_NAME> -c "INSERT INTO private.system_secrets (secret_name, secret_value) VALUES ('actor_signing_secret', '{{STRONG_RANDOM_HMAC_SECRET}}') ON CONFLICT (secret_name) DO UPDATE SET secret_value = EXCLUDED.secret_value;"
+
+# 8. Verify post-migration integrity
 psql -h <CLIENT_DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/tests/us33_ac2_least_privilege_tests.sql
 ```
 
@@ -108,25 +113,31 @@ psql -h <CLIENT_DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/tests/us33
 
 If a migration must be reverted, apply the corresponding `.down.sql` script in reverse order:
 
-### 4.1 Reverting Migration 8 (`provision_school_app_login_and_rls`)
+### 4.1 Reverting Migration 9 (`verifiable_actor_and_auth_gateway`)
+```powershell
+psql -h <DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/migrations/20261101130000_verifiable_actor_and_auth_gateway.down.sql
+```
+*Effect:* Safely drops auth gateway functions in `private`, drops `private.system_secrets`, reverts `receipt_number_counters` composite key, and reverts `private.current_actor_role()` to unverified variant.
+
+### 4.2 Reverting Migration 8 (`provision_school_app_login_and_rls`)
 ```powershell
 psql -h <DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/migrations/20261101120000_provision_school_app_login_and_rls.down.sql
 ```
 *Effect:* Safely drops `school_app_login` role, RLS policies, and actor context helper functions.
 
-### 4.2 Reverting Migration 7 (`provision_private_storage_buckets`)
+### 4.3 Reverting Migration 7 (`provision_private_storage_buckets`)
 ```powershell
 psql -h <DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/migrations/20261101000000_provision_private_storage_buckets.down.sql
 ```
 *Effect:* Safely drops private storage buckets and bucket RLS policies.
 
-### 4.3 Reverting Migration 6 (`staff_auth_security`)
+### 4.4 Reverting Migration 6 (`staff_auth_security`)
 ```powershell
 psql -h <DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/migrations/20261031000000_staff_auth_security.down.sql
 ```
 *Effect:* Safely drops `public.staff_security_profiles` table and triggers.
 
-### 4.4 Reverting Migration 5 (`provision_restricted_app_role`)
+### 4.5 Reverting Migration 5 (`provision_restricted_app_role`)
 ```powershell
 psql -h <DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/migrations/20261030000000_provision_restricted_app_role.down.sql
 ```

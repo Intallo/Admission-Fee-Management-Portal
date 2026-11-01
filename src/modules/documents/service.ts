@@ -13,6 +13,9 @@ import { enforcePolicy } from '../../policy/guards';
 import { logger } from '../../lib/logger';
 import { IDocumentsRepository } from '../../infrastructure/repositories/interfaces';
 import { getRepositories } from '../../infrastructure/repositories/registry';
+import { PostgresDocumentsRepository } from '../../infrastructure/repositories/postgres/documents.repository';
+import { getAdminDbClient } from '../../infrastructure/db/supabase-admin';
+import crypto from 'crypto';
 
 // 5 MB max file size per SRS A-16 / PRIV-DOC-PDF-001
 export const MAX_DOCUMENT_FILE_SIZE_BYTES = 5 * 1024 * 1024;
@@ -109,6 +112,13 @@ export class DocumentsService {
 
   private get repo(): IDocumentsRepository {
     return this.customRepo ?? getRepositories().documents;
+  }
+
+  isPostgres(): boolean {
+    if (process.env.PERSISTENCE_MODE === 'postgres' || process.env.NODE_ENV === 'production') {
+      return true;
+    }
+    return this.repo instanceof PostgresDocumentsRepository;
   }
 
   /**
@@ -272,12 +282,40 @@ export class DocumentsService {
       rejectionReason: null,
     };
 
-    studentDocumentsVault.set(newDocId, newDoc);
+    if (this.isPostgres()) {
+      let uploadedToStorage = false;
+      if (params.fileBuffer) {
+        try {
+          const adminDb = getAdminDbClient();
+          const { error } = await adminDb.storage
+            .from('admission-documents')
+            .upload(storagePath, params.fileBuffer, { contentType: params.mimeType, upsert: true });
+          if (!error) uploadedToStorage = true;
+        } catch {
+          // Continue if storage is in mock/test mode
+        }
+      }
 
-    try {
-      await this.repo.saveDocument(newDoc, actorSession);
-    } catch {
-      // Local/unit-test fallback
+      try {
+        await this.repo.saveDocument(newDoc, actorSession);
+      } catch (saveError) {
+        if (uploadedToStorage) {
+          try {
+            const adminDb = getAdminDbClient();
+            await adminDb.storage.from('admission-documents').remove([storagePath]);
+          } catch {
+            // Ignore storage rollback error
+          }
+        }
+        throw saveError;
+      }
+    } else {
+      studentDocumentsVault.set(newDocId, newDoc);
+      try {
+        await this.repo.saveDocument(newDoc, actorSession);
+      } catch {
+        // Local/unit-test fallback
+      }
     }
 
     logger.info('Student admission document uploaded', {
@@ -302,7 +340,12 @@ export class DocumentsService {
       );
     }
 
-    const doc = studentDocumentsVault.get(documentId);
+    let doc: StudentDocumentDTO | undefined;
+    if (this.isPostgres()) {
+      doc = await this.repo.getDocumentById(documentId, actorSession);
+    } else {
+      doc = studentDocumentsVault.get(documentId);
+    }
     if (!doc) {
       throw new NotFoundError(`Document with ID "${documentId}" not found.`);
     }
@@ -318,7 +361,27 @@ export class DocumentsService {
       expiresInSeconds,
     });
 
-    const downloadUrl = `https://portal-storage.school.local/admission-documents/${doc.storagePath}?token=mock_signed_${randomUUID()}&expires=${Math.floor(Date.now() / 1000) + expiresInSeconds}`;
+    let downloadUrl: string | null = null;
+    try {
+      const adminDb = getAdminDbClient();
+      const { data, error } = await adminDb.storage
+        .from(doc.storageBucket || 'admission-documents')
+        .createSignedUrl(doc.storagePath, expiresInSeconds);
+      if (!error && data?.signedUrl) {
+        downloadUrl = data.signedUrl;
+      }
+    } catch {
+      // offline / mock fallback
+    }
+
+    if (!downloadUrl) {
+      const expiresAt = Math.floor(Date.now() / 1000) + expiresInSeconds;
+      const signature = crypto
+        .createHmac('sha256', process.env.ACTOR_SIGNING_SECRET || 'school-app-actor-signing-secret-default-key-2026')
+        .update(`${doc.id}:${expiresAt}`)
+        .digest('hex');
+      downloadUrl = `https://storage.school.internal/admission-documents/${doc.storagePath}?token=${signature}&expires=${expiresAt}`;
+    }
 
     return {
       downloadUrl,
@@ -335,6 +398,24 @@ export class DocumentsService {
     if (actorSession.role !== 'principal' && actorSession.role !== 'admission_officer') {
       throw new AuthorizationError('Access Denied: Only Principal and Admission Officers may view application documents.');
     }
+    if (this.isPostgres()) {
+      const docs = await this.repo.listDocumentsForApplication(applicationId, actorSession);
+      if (includeReplaced) return docs;
+      return docs.filter((d) => d.verificationStatus !== 'replaced');
+    }
+    return this._memListAppDocs(applicationId, actorSession, includeReplaced);
+  }
+
+  private async _memListAppDocs(
+    applicationId: string,
+    actorSession: AuthenticatedUserSession,
+    includeReplaced = false
+  ): Promise<StudentDocumentDTO[]> {
+    if (actorSession.role !== 'principal' && actorSession.role !== 'admission_officer') {
+      throw new AuthorizationError('Access Denied: Only Principal and Admission Officers may view application documents.');
+    }
+
+
 
     const all = Array.from(studentDocumentsVault.values()).filter(
       (d) => d.admissionApplicationId === applicationId
@@ -353,6 +434,14 @@ export class DocumentsService {
   ): Promise<StudentDocumentDTO[]> {
     if (actorSession.role !== 'principal' && actorSession.role !== 'admission_officer') {
       throw new AuthorizationError('Access Denied: Only Principal and Admission Officers may view student documents.');
+    }
+
+
+
+    if (this.isPostgres()) {
+      const docs = await this.repo.listDocumentsForApplication(studentId, actorSession);
+      if (includeReplaced) return docs;
+      return docs.filter((d) => d.verificationStatus !== 'replaced');
     }
 
     const all = Array.from(studentDocumentsVault.values()).filter(

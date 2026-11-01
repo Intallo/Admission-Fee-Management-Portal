@@ -20,8 +20,10 @@ import { formatInr } from '../../../lib/money/inr';
 
 export class PostgresCertificatesRepository implements ICertificatesRepository {
   async getNextCertificateNumber(prefix?: string, session?: AuthenticatedUserSession): Promise<string> {
-    const runner = session ? (cb: any) => withTransaction(session, cb) : (cb: any) => withTransaction({ staffId: '00000000-0000-0000-0000-000000000000', role: 'principal' } as any, cb);
-    return (runner as any)(async (client: any) => {
+    if (!session || !session.staffId) {
+      throw new AuthorizationError('Authenticated user session is required for certificate operations.');
+    }
+    return withTransaction(session, async (client: any) => {
       const numRes = await client.query(`select private.next_certificate_number($1) as num`, [prefix || 'TC']);
       return numRes.rows[0].num;
     });
@@ -31,8 +33,10 @@ export class PostgresCertificatesRepository implements ICertificatesRepository {
     studentAcademicRecordId: string,
     session?: AuthenticatedUserSession
   ): Promise<StudentCertificateDTO> {
-    const runner = session ? (cb: any) => withTransaction(session, cb) : (cb: any) => withTransaction({ staffId: '00000000-0000-0000-0000-000000000000', role: 'principal' } as any, cb);
-    return (runner as any)(async (client: any) => {
+    if (!session || !session.staffId) {
+      throw new AuthorizationError('Authenticated user session is required for certificate operations.');
+    }
+    return withTransaction(session, async (client: any) => {
       // 1. Check existing certificate
       const existRes = await client.query(
         `select * from public.student_year_certificates where student_academic_record_id = $1`,
@@ -113,8 +117,10 @@ export class PostgresCertificatesRepository implements ICertificatesRepository {
     certificateId: string,
     session?: AuthenticatedUserSession
   ): Promise<StudentCertificateDTO | undefined> {
-    const runner = session ? (cb: any) => withTransaction(session, cb) : (cb: any) => withTransaction({ staffId: '00000000-0000-0000-0000-000000000000', role: 'principal' } as any, cb);
-    return (runner as any)(async (client: any) => {
+    if (!session || !session.staffId) {
+      throw new AuthorizationError('Authenticated user session is required for certificate operations.');
+    }
+    return withTransaction(session, async (client: any) => {
       const res = await client.query(
         `select * from public.student_year_certificates where id = $1`,
         [certificateId]
@@ -128,8 +134,10 @@ export class PostgresCertificatesRepository implements ICertificatesRepository {
     studentRecordId: string,
     session?: AuthenticatedUserSession
   ): Promise<StudentCertificateDTO | undefined> {
-    const runner = session ? (cb: any) => withTransaction(session, cb) : (cb: any) => withTransaction({ staffId: '00000000-0000-0000-0000-000000000000', role: 'principal' } as any, cb);
-    return (runner as any)(async (client: any) => {
+    if (!session || !session.staffId) {
+      throw new AuthorizationError('Authenticated user session is required for certificate operations.');
+    }
+    return withTransaction(session, async (client: any) => {
       const res = await client.query(
         `select * from public.student_year_certificates where student_academic_record_id = $1`,
         [studentRecordId]
@@ -360,8 +368,10 @@ export class PostgresCertificatesRepository implements ICertificatesRepository {
   }
 
   async listCertificates(filter?: any, session?: AuthenticatedUserSession): Promise<StudentCertificateDTO[]> {
-    const runner = session ? (cb: any) => withTransaction(session, cb) : (cb: any) => withTransaction({ staffId: '00000000-0000-0000-0000-000000000000', role: 'principal' } as any, cb);
-    return (runner as any)(async (client: any) => {
+    if (!session || !session.staffId) {
+      throw new AuthorizationError('Authenticated user session is required for certificate operations.');
+    }
+    return withTransaction(session, async (client: any) => {
       let sql = `select * from public.student_year_certificates order by created_at desc`;
       const res = await client.query(sql);
       const list: StudentCertificateDTO[] = [];

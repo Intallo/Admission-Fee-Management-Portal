@@ -28,7 +28,7 @@ In accordance with signed BRD v1.4 Section 6.3, signed SRS v1.4 Section 1.3, and
 - [x] **Zero Leaked Secrets in Repository:** Complete scan of source tree, git history, and build manifests reveals zero committed production passwords, private keys, or API secrets.
 
 ### 2.2 Automated Test Execution & Evidence
-- [x] **100% Test Pass Rate (In-Memory Tier):** Vitest test suite executes 28 test files with 241 total tests; **241 passed, 0 failed, 0 skipped** across domain rules, Zod schemas, RBAC guards, PII masking, Phase 8 persistence/privilege controls, and Phase 8.1 durability/security tests.
+- [x] **100% Test Pass Rate:** Vitest test suite executes 29 test files with 257 total tests; **257 passed, 0 failed, 0 skipped** across domain rules, Zod schemas, RBAC guards, PII masking, Phase 8 persistence/privilege controls, Phase 8.1 durability/security tests, and Phase 8.2 PostgreSQL production integration suite.
 - [x] **Full Security Test Suite:** Dedicated [`tests/security_verification.test.ts`](file:///tests/security_verification.test.ts) (23 tests) passes with 100% success.
 - [x] **Database Constraint & Integrity Tests (PostgreSQL Tier):** SQL test suites (`integrity_tests.sql`, `verification.sql`, `us33_ac2_least_privilege_tests.sql`) pass 100% of assertion checks against PostgreSQL engine via `psql`.
 
@@ -38,8 +38,8 @@ In accordance with signed BRD v1.4 Section 6.3, signed SRS v1.4 Section 1.3, and
 - [x] **PII Protection & DPDP Compliance:** Sensitive demographic data (Aadhaar, income, caste, bank details) is accessible strictly to Principal and Admission Officer; Accounts Officer and System Admin receive masked/redacted views only.
 - [x] **File Upload Security & Private Buckets:** Uploads validated for allowed MIME types (PDF, JPG, PNG) and size (< 5MB); migration `20261101000000` provisions 3 private storage buckets with RLS.
 - [x] **Cross-Year Accounting Isolation:** Unpaid arrears are never carried across academic years; dues calculations are strictly scoped to the active year.
-- [x] **Database Least Privilege Role (US-33 AC2 & F-02 Remediation):** Migrations `20261030000000` and `20261101120000` provision dedicated roles `school_app_user` and `school_app_login` with zero `DELETE` privilege across all tables and zero `UPDATE` privilege on ledger and audit tables. Direct `pg.Pool` connection operates under `school_app_login` with transaction-local context (`app.current_staff_id`, `app.current_role`) enforced by PostgreSQL RLS.
-- [x] **Fail-Closed Row Level Security (RLS):** All 32 tables have RLS enabled with zero public access.
+- [x] **Database Least Privilege Role (US-33 AC2, F-02 Remediation, & Phase 8.2 Security):** Migrations `20261030000000`, `20261101120000`, and `20261101130000` provision dedicated roles `school_app_user` and `school_app_login` with zero `DELETE` privilege across all tables and zero `UPDATE` privilege on ledger and audit tables. Direct `pg.Pool` connection operates under `school_app_login` with transaction-local context (`app.current_staff_id`, `app.current_role`, `app.actor_signature`) verified via HMAC-SHA256 by PostgreSQL RLS. Five `SECURITY DEFINER` gateways in `private` schema reconcile unauthenticated login and lockout lifecycle under RLS.
+- [x] **Fail-Closed Row Level Security (RLS) & Dummy Session Rejection:** All 32 tables have RLS enabled with zero public access. All dummy sessions (`00000000-0000-0000-0000-000000000000`) are rejected at the connection pool boundary. Monotonic counters operate on composite `(series_code, academic_year_id)` key with atomic yearly rollover.
 
 ### 2.4 Financial & Domain Correctness
 - [x] **Zero Payment Prerequisite for Admission (DEC-01):** Admission approval assigns admission number and fee assessment lines without requiring initial payment.

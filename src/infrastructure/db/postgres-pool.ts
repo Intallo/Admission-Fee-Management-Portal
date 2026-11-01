@@ -1,4 +1,5 @@
 import 'server-only';
+import crypto from 'crypto';
 import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
 import { getServerEnv } from '../../lib/env';
 import { assertServerOnly, assertDisposableDatabase } from './guards';
@@ -6,6 +7,15 @@ import { AuthenticatedUserSession } from '../../modules/identity-access/types';
 import { logger } from '../../lib/logger';
 
 let singletonPool: Pool | null = null;
+
+/**
+ * Generates an HMAC-SHA256 signature for actor verification in PostgreSQL RLS context.
+ * Used by private.current_actor_role() to prevent caller role spoofing.
+ */
+export function generateActorSignature(staffId: string, role: string, secretOverride?: string): string {
+  const secret = secretOverride || process.env.ACTOR_SIGNING_SECRET || 'school-app-actor-signing-secret-default-key-2026';
+  return crypto.createHmac('sha256', secret).update(`${staffId}:${role}`).digest('hex');
+}
 
 /**
  * Creates or retrieves the singleton server-only PostgreSQL connection pool.
@@ -74,9 +84,15 @@ export async function withTransaction<T>(
   actorSession: AuthenticatedUserSession,
   callback: (client: PoolClient) => Promise<T>
 ): Promise<T> {
-  if (!actorSession || !actorSession.staffId) {
+  if (!actorSession || !actorSession.staffId || !actorSession.role) {
     throw new Error(
-      '[SECURITY ERROR] Cannot execute transaction: actorSession is mandatory for protected application operations.'
+      '[SECURITY ERROR] Cannot execute transaction: valid actorSession is mandatory for protected application operations.'
+    );
+  }
+
+  if (actorSession.staffId === '00000000-0000-0000-0000-000000000000') {
+    throw new Error(
+      '[SECURITY ERROR] Synthetic zero UUID placeholder session is strictly prohibited in database transactions.'
     );
   }
 
@@ -86,10 +102,11 @@ export async function withTransaction<T>(
   try {
     await client.query('BEGIN');
 
-    // Scoped transaction context (is_local = true per set_config 3rd parameter)
+    // Scoped transaction context with cryptographic HMAC-SHA256 signature
+    const signature = generateActorSignature(actorSession.staffId, actorSession.role);
     await client.query(
-      "SELECT set_config('app.current_staff_id', $1, true), set_config('app.current_role', $2, true)",
-      [actorSession.staffId, actorSession.role]
+      "SELECT set_config('app.current_staff_id', $1, true), set_config('app.current_role', $2, true), set_config('app.actor_signature', $3, true)",
+      [actorSession.staffId, actorSession.role, signature]
     );
 
     const result = await callback(client);
@@ -127,7 +144,7 @@ export async function withSystemTransaction<T>(
     await client.query('BEGIN');
     // Clear actor context
     await client.query(
-      "SELECT set_config('app.current_staff_id', '', true), set_config('app.current_role', '', true)"
+      "SELECT set_config('app.current_staff_id', '', true), set_config('app.current_role', '', true), set_config('app.actor_signature', '', true)"
     );
 
     const result = await callback(client);

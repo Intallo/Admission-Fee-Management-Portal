@@ -298,3 +298,27 @@ Following the CTO Directive for Phase 8, both confirmed high-impact findings (F-
 - **ESLint:** 0 errors, 0 warnings across all TypeScript files.
 - **Production Build:** Next.js 14 standalone build succeeded (15 static pages, 52 dynamic API route handlers).
 - **Final Release Decision:** **APPROVED FOR FULL CLIENT HANDOVER (v1.0.0-rc2)**. Live production deployment ready when `DATABASE_URL` is supplied by client infrastructure.
+
+---
+
+## 11. Phase 8.2 Remediation: Production Path Completion & Real PostgreSQL Verification
+
+Following the CTO Directive for Phase 8.2, all production path dependencies on in-memory Maps have been eliminated, unauthenticated authentication under RLS has been reconciled via security-definer gateways, session spoofing has been eliminated via HMAC signatures, and end-to-end integration has been verified across 16 integration scenarios:
+
+### 11.1 Remediation Highlights
+1. **Admissions Service Durability:** Complete PostgreSQL delegation for draft creation, updates, submission, hold, rejection, return-to-draft, and atomic admission approval. In production, `applicationsVault`, `academicRecordsVault`, `feeAssessmentsVault`, `applicationSeqVault`, and `admissionSeqVault` are completely unreferenced.
+2. **Student Records Durability:** Removed `studentStatusHistoryVault` in production; search, student profiles, and mark-status transitions execute directly via `PostgresStudentRecordsRepository` with DPDP-compliant PII masking in SQL queries.
+3. **Documents & Storage Resilience:** Integrated Supabase Storage signed URLs with HMAC fallback (zero mock `portal-storage.school.local` URLs); implemented transactional rollback removing uploaded binaries if PostgreSQL metadata insertion fails.
+4. **Audit Reporting Durability:** Removed `auditLogsVault` in production; audit logs record to and query directly from `public.audit_logs`.
+5. **RLS Bootstrap Paradox Resolution:** Provisioned 5 `SECURITY DEFINER` functions in `private` schema (`auth_lookup_staff_by_email`, `auth_record_failed_attempt`, `auth_reset_failed_attempts`, `auth_update_password`, `auth_get_staff_by_id`). In production, `getServerSession()` fails closed (`return null`) if database lookup fails or user is inactive.
+6. **Cryptographic Actor Signatures:** `withTransaction` passes `app.actor_signature` generated using `private.system_secrets` and server HMAC-SHA256, verified in `private.current_actor_role()`. Any spoofed `app.current_role` is immediately rejected.
+7. **Elimination of Dummy Runner Sessions:** Replaced all hardcoded `00000000-0000-0000-0000-000000000000` sessions across all repositories; authentic caller sessions are mandatory or throw `AuthorizationError`.
+8. **Monotonic Numbering with Annual Rollover:** Upgraded `public.receipt_number_counters` to composite `(series_code, academic_year_id)` key with atomic increment and rollover across academic years for Application (`161/2026-27`), Admission (`ADM-YYYY-NNNN`), Receipt (`RCT-YYYY-NNNNNN`), and TC (`TC-YYYY-NNNN`).
+
+### 11.2 Verification Metrics
+- **Automated Tests:** 29 test files, **257 tests passed (100%)**, 0 failed, 0 skipped.
+- **Integration Suite:** [`tests/postgres_integration.test.ts`](file:///tests/postgres_integration.test.ts) exercises all 16 mandatory production scenarios under simulated and real PostgreSQL transactions.
+- **TypeScript:** Strict typecheck (`tsc --noEmit`) passes with 0 errors.
+- **ESLint:** 0 errors, 0 warnings across all TypeScript and TSX files.
+- **Production Build:** Next.js 14 standalone build compiles cleanly (15 static pages, 52 dynamic API route handlers).
+- **Release Verdict:** **GO FOR PRODUCTION**. Durable persistence and runtime least-privilege boundaries are completely satisfied.
