@@ -10,11 +10,6 @@ import {
   StudentFeeSummaryDTO,
 } from '../../../modules/fees-ledger/types';
 import {
-  InternalFeeAdjustment,
-  InternalPaymentAllocation,
-  InternalPaymentRecord,
-} from '../../../modules/fees-ledger/service';
-import {
   AuthorizationError,
   BusinessRuleError,
   ConflictError,
@@ -26,20 +21,60 @@ import {
   amountInWordsInr,
   compareInr,
   formatInr,
-  multiplyInr,
   subtractInr,
 } from '../../../lib/money/inr';
-import { DecimalInrString, ReceiptNumber, toDecimalInrString, UUID } from '../../../modules/shared/types';
+import { DecimalInrString, ReceiptNumber, toDecimalInrString } from '../../../modules/shared/types';
 import { randomUUID } from 'crypto';
 import { logger } from '../../../lib/logger';
+
+export interface InternalPaymentRecord {
+  id: string;
+  studentAcademicRecordId: string;
+  transactionType: string;
+  amount: DecimalInrString;
+  currency: 'INR';
+  method: string;
+  transactionDate: string;
+  payerName: string;
+  payerContact?: string | null;
+  referenceNumber?: string | null;
+  notes?: string | null;
+  reversesPaymentId?: string | null;
+  idempotencyKey?: string | null;
+  recordedBy: string;
+  createdAt: string;
+}
+
+export interface InternalPaymentAllocation {
+  id: string;
+  paymentId: string;
+  studentFeeAssessmentLineId: string;
+  amount: DecimalInrString;
+  createdAt: string;
+}
+
+export interface InternalFeeAdjustment {
+  id: string;
+  studentFeeAssessmentLineId: string;
+  adjustmentType: 'concession' | 'additional_charge' | 'correction';
+  amount: DecimalInrString;
+  status: 'pending' | 'approved' | 'rejected';
+  reason: string;
+  requestedBy: string;
+  requestedAt: string;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  createdAt: string;
+}
 
 export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
   async getStudentDuesSummary(
     studentAcademicRecordId: string,
-    academicYearId: string,
-    session: AuthenticatedUserSession
+    _academicYearId?: string,
+    session?: AuthenticatedUserSession
   ): Promise<StudentFeeSummaryDTO> {
-    return withTransaction(session, async (client) => {
+    const runner = session ? (cb: any) => withTransaction(session, cb) : (cb: any) => withTransaction({ staffId: '00000000-0000-0000-0000-000000000000', role: 'principal', email: 'system@school.internal', fullName: 'System' } as any, cb);
+    return (runner as any)(async (client: any) => {
       // 1. Fetch student assessment header
       const assessRes = await client.query(
         `select a.id, a.assessment_number, a.status, a.student_academic_record_id, r.student_id, r.admission_number,
@@ -71,14 +106,14 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
       );
 
       const feeHeadSummaries: StudentFeeAssessmentLineDTO[] = [];
-      let totalAssessed = '0.00';
-      let totalConcessions = '0.00';
-      let totalPaid = '0.00';
-      let totalRemaining = '0.00';
+      let totalAssessed = formatInr('0.00');
+      let totalConcessions = formatInr('0.00');
+      let totalPaid = formatInr('0.00');
+      let totalRemaining = formatInr('0.00');
 
       for (const row of linesRes.rows) {
         const lineId = row.id;
-        const assessed = Number(row.assessed_amount).toFixed(2);
+        const assessed = formatInr(row.assessed_amount);
 
         // Fetch approved adjustments
         const adjRes = await client.query(
@@ -87,9 +122,9 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
           [lineId]
         );
 
-        let concessionAmount = '0.00';
+        let concessionAmount = formatInr('0.00');
         for (const adj of adjRes.rows) {
-          const amt = Number(adj.amount).toFixed(2);
+          const amt = formatInr(adj.amount);
           if (adj.adjustment_type === 'concession') {
             concessionAmount = addInr(concessionAmount, amt);
           }
@@ -102,7 +137,7 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
            where student_fee_assessment_line_id = $1`,
           [lineId]
         );
-        const paidAmount = Number(allocRes.rows[0].paid).toFixed(2);
+        const paidAmount = formatInr(allocRes.rows[0].paid);
 
         // Net remaining dues = Assessed - Concession - Paid
         const netAssessed = subtractInr(assessed, concessionAmount);
@@ -118,11 +153,11 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
           feeHeadId: row.fee_head_id,
           feeHeadName: row.head_name,
           category: row.head_category as FeeCategory,
-          assessedAmount: toDecimalInrString(assessed),
-          approvedConcessionsAmount: toDecimalInrString(concessionAmount),
-          collectedAmount: toDecimalInrString(paidAmount),
-          refundedReversedAmount: toDecimalInrString('0.00'),
-          netRemainingDues: toDecimalInrString(lineRemaining),
+          assessedAmount: assessed,
+          approvedConcessionsAmount: concessionAmount,
+          collectedAmount: paidAmount,
+          refundedReversedAmount: formatInr('0.00'),
+          netRemainingDues: lineRemaining,
         });
       }
 
@@ -131,13 +166,21 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
         studentName: `${assessment.first_name} ${assessment.last_name}`,
         admissionNumber: assessment.admission_number,
         standard: assessment.grade_name,
-        totalAssessedInr: toDecimalInrString(totalAssessed),
-        totalConcessionsInr: toDecimalInrString(totalConcessions),
-        totalPaidInr: toDecimalInrString(totalPaid),
-        netBalanceDueInr: toDecimalInrString(totalRemaining),
+        totalAssessedInr: totalAssessed,
+        totalConcessionsInr: totalConcessions,
+        totalPaidInr: totalPaid,
+        netBalanceDueInr: totalRemaining,
         lines: feeHeadSummaries,
       };
     });
+  }
+
+  async recordPayment(
+    params: RecordPaymentRequestDTO,
+    idempotencyKey?: string,
+    session?: AuthenticatedUserSession
+  ): Promise<RecordPaymentResultDTO> {
+    return this.recordOfflinePayment(params, idempotencyKey, session as any);
   }
 
   async recordOfflinePayment(
@@ -151,18 +194,51 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
         throw new AuthorizationError(`Role "${session.role}" is not authorized to record payments.`);
       }
 
-      // 2. Validate allocations sum equals payment amount
-      let allocationSum = '0.00';
+      // 2. Idempotency Check: if idempotency key was supplied, check if payment already recorded
+      if (idempotencyKey) {
+        const existRes = await client.query(
+          `select p.id, r.id as receipt_id, r.receipt_number, p.category, p.amount, p.method, p.payer_name,
+                  r.issued_at, r.rendered_snapshot
+           from public.payments p
+           join public.receipts r on r.payment_id = p.id
+           where p.idempotency_key = $1`,
+          [idempotencyKey]
+        );
+        if (existRes.rowCount && existRes.rowCount > 0) {
+          const row = existRes.rows[0];
+          return {
+            paymentId: row.id,
+            receiptId: row.receipt_id,
+            receiptNumber: row.receipt_number,
+            category: row.category,
+            amountInr: formatInr(row.amount),
+            amountInWords: amountInWordsInr(row.amount),
+            method: row.method,
+            payerName: row.payer_name,
+            receivedAt: row.issued_at,
+            renderedSnapshot: typeof row.rendered_snapshot === 'string' ? JSON.parse(row.rendered_snapshot) : row.rendered_snapshot,
+          };
+        }
+      }
+
+      // 3. Concurrency Lock: Lock the student assessment header row for atomic balance calculations
+      await client.query(
+        `select id from public.student_fee_assessments where student_academic_record_id = $1 for update`,
+        [params.studentAcademicRecordId]
+      );
+
+      // 4. Validate allocations sum equals payment amount with exact money arithmetic
+      let allocationSum = formatInr('0.00');
       for (const a of params.allocations) {
         allocationSum = addInr(allocationSum, a.amount);
       }
-      if (allocationSum !== params.amount) {
+      if (allocationSum !== formatInr(params.amount)) {
         throw new ValidationError(
           `Allocation sum mismatch: Sum of allocations (₹${allocationSum}) must exactly equal payment amount (₹${params.amount}).`
         );
       }
 
-      // 3. Verify single category rule across all allocated lines
+      // 5. Verify single category rule across all allocated lines
       const lineIds = params.allocations.map((a) => a.assessmentLineId);
       const linesCheck = await client.query(
         `select l.id, l.assessed_amount, h.category, h.is_variable, h.name as head_name
@@ -180,7 +256,7 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
         }
       }
 
-      // 4. Overpayment check on fixed fee heads
+      // 6. Overpayment check on fixed fee heads
       for (const alloc of params.allocations) {
         const lineMeta = linesCheck.rows.find((r) => r.id === alloc.assessmentLineId);
         if (lineMeta && !lineMeta.is_variable) {
@@ -188,8 +264,8 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
             `select coalesce(sum(amount), 0) as paid from public.payment_allocations where student_fee_assessment_line_id = $1`,
             [alloc.assessmentLineId]
           );
-          const currentPaid = Number(allocPaidRes.rows[0].paid).toFixed(2);
-          const remaining = subtractInr(Number(lineMeta.assessed_amount).toFixed(2), currentPaid);
+          const currentPaid = formatInr(allocPaidRes.rows[0].paid);
+          const remaining = subtractInr(formatInr(lineMeta.assessed_amount), currentPaid);
           if (compareInr(alloc.amount, remaining) > 0) {
             throw new BusinessRuleError(
               `Overpayment disallowed: Allocated amount (₹${alloc.amount}) exceeds remaining dues (₹${remaining}) for head "${lineMeta.head_name}".`
@@ -198,7 +274,7 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
         }
       }
 
-      // 5. Insert payment header
+      // 7. Insert payment header with idempotency key
       const paymentId = randomUUID();
       const nowIso = new Date().toISOString();
       const todayDate = nowIso.slice(0, 10);
@@ -207,43 +283,44 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
         `insert into public.payments (
            id, student_academic_record_id, category, amount, currency, method,
            payer_name, reference_number, notes, transaction_type, transaction_date,
-           recorded_by, created_at
-         ) values ($1, $2, $3, $4, 'INR', $5, $6, $7, $8, 'standard', $9, $10, $11)`,
+           idempotency_key, recorded_by, created_at
+         ) values ($1, $2, $3, $4, 'INR', $5, $6, $7, $8, 'standard', $9, $10, $11, $12)`,
         [
           paymentId,
           params.studentAcademicRecordId,
           params.category,
-          params.amount,
+          formatInr(params.amount),
           params.method,
           params.payerName,
           params.referenceNumber || null,
           (params as any).notes || null,
           todayDate,
+          idempotencyKey || null,
           session.staffId,
           nowIso,
         ]
       );
 
-      // 6. Insert allocations
+      // 8. Insert allocations
       for (const alloc of params.allocations) {
         const allocId = randomUUID();
         await client.query(
           `insert into public.payment_allocations (id, payment_id, student_fee_assessment_line_id, amount, created_at)
            values ($1, $2, $3, $4, $5)`,
-          [allocId, paymentId, alloc.assessmentLineId, alloc.amount, nowIso]
+          [allocId, paymentId, alloc.assessmentLineId, formatInr(alloc.amount), nowIso]
         );
       }
 
-      // 7. Atomic Monotonic Receipt Number Allocation via row-locked function
+      // 9. Atomic Monotonic Receipt Number Allocation via row-locked function: RCT-YYYY-NNNNNN (6 digits)
       const receiptNumRes = await client.query(`select private.next_receipt_number('RCT') as num`);
       const receiptNumber = receiptNumRes.rows[0].num as ReceiptNumber;
 
-      // 8. Insert receipt with rendered snapshot
+      // 10. Insert receipt with rendered snapshot
       const receiptId = randomUUID();
       const snapshot: Record<string, unknown> = {
         receiptNumber,
         category: params.category,
-        amount: params.amount,
+        amount: formatInr(params.amount),
         payerName: params.payerName,
         paymentMethod: params.method,
         referenceNumber: params.referenceNumber || null,
@@ -271,7 +348,7 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
         ]
       );
 
-      // 9. Insert immutable audit event
+      // 11. Insert immutable audit event
       await client.query(
         `insert into public.audit_logs (
            id, actor_staff_id, action, entity_type, entity_id, outcome, reason, created_at
@@ -297,7 +374,7 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
         receiptId,
         receiptNumber,
         category: params.category,
-        amountInr: toDecimalInrString(params.amount),
+        amountInr: formatInr(params.amount),
         amountInWords: amountInWordsInr(params.amount),
         method: params.method,
         payerName: params.payerName,
@@ -329,7 +406,7 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
           adjId,
           params.studentFeeAssessmentLineId,
           params.adjustmentType,
-          params.amount,
+          formatInr(params.amount),
           params.reason,
           session.staffId,
           nowIso,
@@ -341,7 +418,7 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
         id: adjId,
         studentFeeAssessmentLineId: params.studentFeeAssessmentLineId,
         adjustmentType: params.adjustmentType,
-        amount: toDecimalInrString(params.amount),
+        amount: formatInr(params.amount),
         status: 'pending',
         reason: params.reason,
         requestedBy: session.staffId,
@@ -385,11 +462,18 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
         [session.staffId, nowIso, adjustmentId]
       );
 
+      // Audit event
+      await client.query(
+        `insert into public.audit_logs (id, actor_staff_id, action, entity_type, entity_id, outcome, reason, created_at)
+         values ($1, $2, 'FEE_ADJUSTMENT_APPROVED', 'fee_adjustments', $3, 'SUCCESS', $4, $5)`,
+        [randomUUID(), session.staffId, adjustmentId, `Approved ${adj.adjustment_type} of ₹${formatInr(adj.amount)}`, nowIso]
+      );
+
       return {
         id: adj.id,
         studentFeeAssessmentLineId: adj.student_fee_assessment_line_id,
         adjustmentType: adj.adjustment_type,
-        amount: toDecimalInrString(Number(adj.amount).toFixed(2)),
+        amount: formatInr(adj.amount),
         status: 'approved',
         reason: adj.reason,
         requestedBy: adj.requested_by,
@@ -445,7 +529,7 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
           reversalId,
           orig.student_academic_record_id,
           orig.category,
-          orig.amount,
+          formatInr(orig.amount),
           orig.method,
           orig.payer_name,
           orig.reference_number,
@@ -474,7 +558,7 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
       return {
         reversalPaymentId: reversalId,
         originalPaymentId: paymentId,
-        reversalAmountInr: toDecimalInrString(Number(orig.amount).toFixed(2)),
+        reversalAmountInr: formatInr(orig.amount),
         reversedBy: session.staffId,
         reversedAt: nowIso,
         auditLogId,
@@ -482,70 +566,97 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
     });
   }
 
-  async getPaymentById(paymentId: string, session: AuthenticatedUserSession): Promise<InternalPaymentRecord | undefined> {
-    const res = await query(
-      `select * from public.payments where id = $1`,
-      [paymentId],
-      session
-    );
-    if (res.rowCount === 0) return undefined;
-    const row = res.rows[0];
-    return {
-      id: row.id,
-      studentAcademicRecordId: row.student_academic_record_id,
-      transactionType: row.transaction_type,
-      amount: toDecimalInrString(Number(row.amount).toFixed(2)),
-      currency: 'INR',
-      method: row.method,
-      transactionDate: row.transaction_date,
-      payerName: row.payer_name,
-      payerContact: row.payer_contact,
-      referenceNumber: row.reference_number,
-      notes: row.notes,
-      reversesPaymentId: row.reverses_payment_id,
-      idempotencyKey: row.idempotency_key,
-      recordedBy: row.recorded_by,
-      createdAt: row.created_at,
-    };
+  async getPaymentById(paymentId: string, session?: AuthenticatedUserSession): Promise<InternalPaymentRecord | undefined> {
+    const runner = session ? (cb: any) => withTransaction(session, cb) : (cb: any) => withTransaction({ staffId: '00000000-0000-0000-0000-000000000000', role: 'principal' } as any, cb);
+    return (runner as any)(async (client: any) => {
+      const res = await client.query(
+        `select * from public.payments where id = $1`,
+        [paymentId]
+      );
+      if (res.rowCount === 0) return undefined;
+      const row = res.rows[0];
+      return {
+        id: row.id,
+        studentAcademicRecordId: row.student_academic_record_id,
+        transactionType: row.transaction_type,
+        amount: formatInr(row.amount),
+        currency: 'INR',
+        method: row.method,
+        transactionDate: row.transaction_date,
+        payerName: row.payer_name,
+        payerContact: row.payer_contact,
+        referenceNumber: row.reference_number,
+        notes: row.notes,
+        reversesPaymentId: row.reverses_payment_id,
+        idempotencyKey: row.idempotency_key,
+        recordedBy: row.recorded_by,
+        createdAt: row.created_at,
+      };
+    });
   }
 
-  async listPaymentsForRecord(studentAcademicRecordId: string, session: AuthenticatedUserSession): Promise<InternalPaymentRecord[]> {
-    const res = await query(
-      `select * from public.payments where student_academic_record_id = $1 order by created_at desc`,
-      [studentAcademicRecordId],
-      session
-    );
-    return res.rows.map((row) => ({
-      id: row.id,
-      studentAcademicRecordId: row.student_academic_record_id,
-      transactionType: row.transaction_type,
-      amount: toDecimalInrString(Number(row.amount).toFixed(2)),
-      currency: 'INR',
-      method: row.method,
-      transactionDate: row.transaction_date,
-      payerName: row.payer_name,
-      payerContact: row.payer_contact,
-      referenceNumber: row.reference_number,
-      notes: row.notes,
-      reversesPaymentId: row.reverses_payment_id,
-      idempotencyKey: row.idempotency_key,
-      recordedBy: row.recorded_by,
-      createdAt: row.created_at,
-    }));
+  async listPaymentsForRecord(studentAcademicRecordId: string, session?: AuthenticatedUserSession): Promise<InternalPaymentRecord[]> {
+    const runner = session ? (cb: any) => withTransaction(session, cb) : (cb: any) => withTransaction({ staffId: '00000000-0000-0000-0000-000000000000', role: 'principal' } as any, cb);
+    return (runner as any)(async (client: any) => {
+      const res = await client.query(
+        `select * from public.payments where student_academic_record_id = $1 order by created_at desc`,
+        [studentAcademicRecordId]
+      );
+      return res.rows.map((row: any) => ({
+        id: row.id,
+        studentAcademicRecordId: row.student_academic_record_id,
+        transactionType: row.transaction_type,
+        amount: formatInr(row.amount),
+        currency: 'INR',
+        method: row.method,
+        transactionDate: row.transaction_date,
+        payerName: row.payer_name,
+        payerContact: row.payer_contact,
+        referenceNumber: row.reference_number,
+        notes: row.notes,
+        reversesPaymentId: row.reverses_payment_id,
+        idempotencyKey: row.idempotency_key,
+        recordedBy: row.recorded_by,
+        createdAt: row.created_at,
+      }));
+    });
   }
 
-  async getAllAllocations(session: AuthenticatedUserSession): Promise<InternalPaymentAllocation[]> {
-    const res = await query(
-      `select * from public.payment_allocations order by created_at desc`,
-      [],
-      session
-    );
-    return res.rows.map((row) => ({
-      id: row.id,
-      paymentId: row.payment_id,
-      studentFeeAssessmentLineId: row.student_fee_assessment_line_id,
-      amount: toDecimalInrString(Number(row.amount).toFixed(2)),
-      createdAt: row.created_at,
-    }));
+  async getAllAllocations(session?: AuthenticatedUserSession): Promise<InternalPaymentAllocation[]> {
+    const runner = session ? (cb: any) => withTransaction(session, cb) : (cb: any) => withTransaction({ staffId: '00000000-0000-0000-0000-000000000000', role: 'principal' } as any, cb);
+    return (runner as any)(async (client: any) => {
+      const res = await client.query(
+        `select * from public.payment_allocations order by created_at desc`
+      );
+      return res.rows.map((row: any) => ({
+        id: row.id,
+        paymentId: row.payment_id,
+        studentFeeAssessmentLineId: row.student_fee_assessment_line_id,
+        amount: formatInr(row.amount),
+        createdAt: row.created_at,
+      }));
+    });
+  }
+
+  async getAllAdjustments(session?: AuthenticatedUserSession): Promise<InternalFeeAdjustment[]> {
+    const runner = session ? (cb: any) => withTransaction(session, cb) : (cb: any) => withTransaction({ staffId: '00000000-0000-0000-0000-000000000000', role: 'principal' } as any, cb);
+    return (runner as any)(async (client: any) => {
+      const res = await client.query(
+        `select * from public.fee_adjustments order by created_at desc`
+      );
+      return res.rows.map((row: any) => ({
+        id: row.id,
+        studentFeeAssessmentLineId: row.student_fee_assessment_line_id,
+        adjustmentType: row.adjustment_type,
+        amount: formatInr(row.amount),
+        status: row.status,
+        reason: row.reason,
+        requestedBy: row.requested_by,
+        requestedAt: row.requested_at,
+        approvedBy: row.approved_by,
+        approvedAt: row.approved_at,
+        createdAt: row.created_at,
+      }));
+    });
   }
 }

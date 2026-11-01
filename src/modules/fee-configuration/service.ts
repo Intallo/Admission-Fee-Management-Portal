@@ -23,202 +23,29 @@ import { academicYearsService } from '../academic-years/service';
 import { logger } from '../../lib/logger';
 import { toDecimalInrString } from '../shared/types';
 import { addInr, formatInr, toDecimal } from '../../lib/money/inr';
-import { getAdminDbClient } from '../../infrastructure/db/supabase-admin';
-
-// Master Fee Heads (default catalog)
-const INITIAL_FEE_HEADS: FeeHeadDTO[] = [
-  {
-    id: '50000000-0000-0000-0000-000000000001',
-    code: 'ADMISSION_FEE',
-    name: 'Admission Fee',
-    category: 'school_fee',
-    isVariable: true,
-    isActive: true,
-  },
-  {
-    id: '50000000-0000-0000-0000-000000000002',
-    code: 'TUITION_FEE',
-    name: 'Tuition Fee',
-    category: 'school_fee',
-    isVariable: false,
-    isActive: true,
-  },
-  {
-    id: '50000000-0000-0000-0000-000000000003',
-    code: 'DEVELOPMENT_FEE',
-    name: 'Development Fee',
-    category: 'school_fee',
-    isVariable: false,
-    isActive: true,
-  },
-  {
-    id: '50000000-0000-0000-0000-000000000004',
-    code: 'EXAM_FEE',
-    name: 'Examination Fee',
-    category: 'school_fee',
-    isVariable: false,
-    isActive: true,
-  },
-  {
-    id: '50000000-0000-0000-0000-000000000005',
-    code: 'BOOKS',
-    name: 'Books and Stationery',
-    category: 'books',
-    isVariable: false,
-    isActive: true,
-  },
-  {
-    id: '50000000-0000-0000-0000-000000000006',
-    code: 'SCHOOL_BUS',
-    name: 'School Bus / Transport Fee',
-    category: 'vehicle',
-    isVariable: true,
-    isActive: true,
-  },
-];
-
-// Default Transport Rates
-const INITIAL_TRANSPORT_RATES: TransportRateDTO[] = [
-  {
-    id: '70000000-0000-0000-0000-000000000001',
-    academicYearId: '00000000-0000-0000-0000-000000000001',
-    placeName: 'Hebbal',
-    mode: 'school_bus',
-    rateAmount: toDecimalInrString('6000.00'),
-    isActive: true,
-  },
-  {
-    id: '70000000-0000-0000-0000-000000000002',
-    academicYearId: '00000000-0000-0000-0000-000000000001',
-    placeName: 'Yelahanka',
-    mode: 'school_bus',
-    rateAmount: toDecimalInrString('8000.00'),
-    isActive: true,
-  },
-  {
-    id: '70000000-0000-0000-0000-000000000003',
-    academicYearId: '00000000-0000-0000-0000-000000000001',
-    placeName: 'Jayanagar',
-    mode: 'school_bus',
-    rateAmount: toDecimalInrString('10000.00'),
-    isActive: true,
-  },
-];
-
-// Default Fee Structures
-const INITIAL_FEE_STRUCTURES: FeeStructureDTO[] = [
-  {
-    id: '60000000-0000-0000-0000-000000000001',
-    academicYearId: '00000000-0000-0000-0000-000000000001',
-    gradeLevelId: '30000000-0000-0000-0000-000000000004', // STD1
-    gradeLevelName: 'Class 1',
-    version: 1,
-    status: 'approved',
-    approvedBy: '11111111-1111-1111-1111-111111111111',
-    approvedAt: '2026-06-01T08:00:00.000Z',
-    lines: [
-      {
-        id: '60000000-0000-0000-0001-000000000001',
-        feeHeadId: '50000000-0000-0000-0000-000000000001',
-        feeHeadName: 'Admission Fee',
-        category: 'school_fee',
-        defaultAmount: toDecimalInrString('0.00'),
-        isOptional: false,
-      },
-      {
-        id: '60000000-0000-0000-0001-000000000002',
-        feeHeadId: '50000000-0000-0000-0000-000000000002',
-        feeHeadName: 'Tuition Fee',
-        category: 'school_fee',
-        defaultAmount: toDecimalInrString('14000.00'),
-        isOptional: false,
-      },
-      {
-        id: '60000000-0000-0000-0001-000000000003',
-        feeHeadId: '50000000-0000-0000-0000-000000000003',
-        feeHeadName: 'Development Fee',
-        category: 'school_fee',
-        defaultAmount: toDecimalInrString('2000.00'),
-        isOptional: false,
-      },
-      {
-        id: '60000000-0000-0000-0001-000000000004',
-        feeHeadId: '50000000-0000-0000-0000-000000000004',
-        feeHeadName: 'Examination Fee',
-        category: 'school_fee',
-        defaultAmount: toDecimalInrString('1200.00'),
-        isOptional: false,
-      },
-      {
-        id: '60000000-0000-0000-0001-000000000005',
-        feeHeadId: '50000000-0000-0000-0000-000000000005',
-        feeHeadName: 'Books and Stationery',
-        category: 'books',
-        defaultAmount: toDecimalInrString('2500.00'),
-        isOptional: false,
-      },
-    ],
-    totalFixedAmountInr: toDecimalInrString('19700.00'),
-  },
-  {
-    id: '60000000-0000-0000-0000-000000000002',
-    academicYearId: '00000000-0000-0000-0000-000000000001',
-    gradeLevelId: '30000000-0000-0000-0000-000000000001', // Nursery
-    gradeLevelName: 'Nursery',
-    version: 1,
-    status: 'approved',
-    approvedBy: '11111111-1111-1111-1111-111111111111',
-    approvedAt: '2026-06-01T08:00:00.000Z',
-    lines: [
-      {
-        id: '60000000-0000-0000-0002-000000000001',
-        feeHeadId: '50000000-0000-0000-0000-000000000001',
-        feeHeadName: 'Admission Fee',
-        category: 'school_fee',
-        defaultAmount: toDecimalInrString('0.00'),
-        isOptional: false,
-      },
-      {
-        id: '60000000-0000-0000-0002-000000000002',
-        feeHeadId: '50000000-0000-0000-0000-000000000002',
-        feeHeadName: 'Tuition Fee',
-        category: 'school_fee',
-        defaultAmount: toDecimalInrString('10000.00'),
-        isOptional: false,
-      },
-      {
-        id: '60000000-0000-0000-0002-000000000003',
-        feeHeadId: '50000000-0000-0000-0000-000000000003',
-        feeHeadName: 'Development Fee',
-        category: 'school_fee',
-        defaultAmount: toDecimalInrString('1500.00'),
-        isOptional: false,
-      },
-    ],
-    totalFixedAmountInr: toDecimalInrString('11500.00'),
-  },
-];
-
-// In-memory vaults for synthetic execution and test isolation
-let feeHeadsVault = new Map<string, FeeHeadDTO>(INITIAL_FEE_HEADS.map((h) => [h.id, { ...h }]));
-let transportRatesVault = new Map<string, TransportRateDTO>(INITIAL_TRANSPORT_RATES.map((r) => [r.id, { ...r }]));
-let feeStructuresVault = new Map<string, FeeStructureDTO>(INITIAL_FEE_STRUCTURES.map((s) => [s.id, { ...s, lines: s.lines.map((l) => ({ ...l })) }]));
+import { IFeeConfigurationRepository } from '../../infrastructure/repositories/interfaces';
+import { getRepositories } from '../../infrastructure/repositories/registry';
 
 export class FeeConfigurationService {
-  /**
-   * Resets configuration data for testing.
-   */
+  private customRepo?: IFeeConfigurationRepository;
+
+  constructor(repo?: IFeeConfigurationRepository) {
+    this.customRepo = repo;
+  }
+
+  private get repo(): IFeeConfigurationRepository {
+    return this.customRepo ?? getRepositories().feeConfiguration;
+  }
+
   resetForTesting(): void {
-    feeHeadsVault = new Map<string, FeeHeadDTO>(INITIAL_FEE_HEADS.map((h) => [h.id, { ...h }]));
-    transportRatesVault = new Map<string, TransportRateDTO>(INITIAL_TRANSPORT_RATES.map((r) => [r.id, { ...r }]));
-    feeStructuresVault = new Map<string, FeeStructureDTO>(INITIAL_FEE_STRUCTURES.map((s) => [s.id, { ...s, lines: s.lines.map((l) => ({ ...l })) }]));
+    this.repo.resetForTesting?.();
   }
 
   /**
    * Lists fee heads with optional category and active filtering.
    */
   async listFeeHeads(category?: FeeCategory, activeOnly = true): Promise<FeeHeadDTO[]> {
-    let list = Array.from(feeHeadsVault.values());
+    let list = await this.repo.listFeeHeads();
     if (category) {
       list = list.filter((h) => h.category === category);
     }
@@ -232,7 +59,8 @@ export class FeeConfigurationService {
    * Retrieves a single fee head by ID.
    */
   async getFeeHeadById(id: string): Promise<FeeHeadDTO> {
-    const head = feeHeadsVault.get(id);
+    const list = await this.repo.listFeeHeads();
+    const head = list.find((h) => h.id === id);
     if (!head) {
       throw new NotFoundError(`Fee head with ID "${id}" not found.`);
     }
@@ -240,7 +68,7 @@ export class FeeConfigurationService {
   }
 
   /**
-   * Creates a new fee head (Accounts Officer or Principal).
+   * Creates a new fee head (Principal only per Phase 8.1 Directive).
    */
   async createFeeHead(
     payload: {
@@ -260,32 +88,32 @@ export class FeeConfigurationService {
       throw new ValidationError('Fee head code and name are required.');
     }
 
-    const duplicate = Array.from(feeHeadsVault.values()).find(
-      (h) => h.code.toUpperCase() === cleanCode
-    );
+    const existing = await this.repo.listFeeHeads(actorSession);
+    const duplicate = existing.find((h) => h.code.toUpperCase() === cleanCode);
     if (duplicate) {
       throw new ConflictError(`Fee head with code "${cleanCode}" already exists.`);
     }
 
-    const newHead: FeeHeadDTO = {
-      id: randomUUID(),
-      code: cleanCode,
-      name: cleanName,
-      category: payload.category,
-      isVariable: !!payload.isVariable,
-      isActive: true,
-    };
-
-    feeHeadsVault.set(newHead.id, newHead);
+    const created = await this.repo.createFeeHead(
+      {
+        id: randomUUID(),
+        code: cleanCode,
+        name: cleanName,
+        category: payload.category,
+        isVariable: !!payload.isVariable,
+        isActive: true,
+      },
+      actorSession
+    );
 
     logger.info('New fee head created', {
-      feeHeadId: newHead.id,
-      code: newHead.code,
-      category: newHead.category,
+      feeHeadId: created.id,
+      code: created.code,
+      category: created.category,
       actorStaffId: actorSession.staffId,
     });
 
-    return newHead;
+    return created;
   }
 
   /**
@@ -296,10 +124,7 @@ export class FeeConfigurationService {
     gradeLevelId?: string;
     status?: FeeStructureState;
   }): Promise<FeeStructureDTO[]> {
-    let list = Array.from(feeStructuresVault.values());
-    if (filters?.academicYearId) {
-      list = list.filter((s) => s.academicYearId === filters.academicYearId);
-    }
+    let list = await this.repo.listFeeStructures(filters?.academicYearId);
     if (filters?.gradeLevelId) {
       list = list.filter((s) => s.gradeLevelId === filters.gradeLevelId);
     }
@@ -313,11 +138,7 @@ export class FeeConfigurationService {
    * Retrieves a single fee structure by ID.
    */
   async getFeeStructureById(id: string): Promise<FeeStructureDTO> {
-    const struct = feeStructuresVault.get(id);
-    if (!struct) {
-      throw new NotFoundError(`Fee structure with ID "${id}" not found.`);
-    }
-    return struct;
+    return this.repo.getFeeStructureById(id);
   }
 
   /**
@@ -327,17 +148,11 @@ export class FeeConfigurationService {
     academicYearId: string,
     gradeLevelId: string
   ): Promise<FeeStructureDTO | null> {
-    const match = Array.from(feeStructuresVault.values()).find(
-      (s) =>
-        s.academicYearId === academicYearId &&
-        s.gradeLevelId === gradeLevelId &&
-        s.status === 'approved'
-    );
-    return match || null;
+    return this.repo.getFeeStructureForGrade(academicYearId, gradeLevelId);
   }
 
   /**
-   * Creates a draft fee structure (Accounts Officer or Principal).
+   * Creates a draft fee structure.
    */
   async createFeeStructure(
     payload: CreateFeeStructureDTO,
@@ -348,81 +163,83 @@ export class FeeConfigurationService {
     // 1. Assert academic year is writable
     await academicYearsService.assertAcademicYearWritable(payload.academicYearId);
 
+    // 2. Validate at least one line provided
     if (!payload.lines || payload.lines.length === 0) {
-      throw new ValidationError('At least one fee head line is required for a fee structure.');
+      throw new ValidationError('A fee structure must contain at least one fee head line.');
     }
 
-    // 2. Compute next version number for this grade and academic year
-    const existing = Array.from(feeStructuresVault.values()).filter(
-      (s) => s.academicYearId === payload.academicYearId && s.gradeLevelId === payload.gradeLevelId
-    );
-    const nextVersion = existing.length > 0 ? Math.max(...existing.map((s) => s.version)) + 1 : 1;
+    // 3. Duplicate fee head check within payload
+    const headIds = payload.lines.map((l) => l.feeHeadId);
+    if (new Set(headIds).size !== headIds.length) {
+      throw new ValidationError('Duplicate fee heads are not permitted within a single fee structure.');
+    }
 
-    // 3. Validate lines and calculate total fixed amount
-    const structureId = randomUUID();
-    let totalFixed = '0.00';
-    const lines: FeeStructureLineDTO[] = [];
+    // 4. Verify all fee heads exist and compute total
+    const heads = await this.repo.listFeeHeads(actorSession);
+    let total = '0.00';
+    const lines = [];
 
-    const headIdSet = new Set<string>();
-
-    for (const item of payload.lines) {
-      if (headIdSet.has(item.feeHeadId)) {
-        throw new ValidationError(`Duplicate fee head in structure lines: ${item.feeHeadId}`);
-      }
-      headIdSet.add(item.feeHeadId);
-
-      const feeHead = await this.getFeeHeadById(item.feeHeadId);
-      const rawAmt = item.defaultAmount || (item as any).amount || '0.00';
-      const decAmount = toDecimal(rawAmt);
-
-      if (decAmount.isNegative()) {
-        throw new ValidationError(`Fee amount for ${feeHead.name} cannot be negative.`);
+    for (const line of payload.lines) {
+      const head = heads.find((h) => h.id === line.feeHeadId);
+      if (!head) {
+        throw new NotFoundError(`Fee head with ID "${line.feeHeadId}" does not exist.`);
       }
 
-      const formatted = formatInr(decAmount);
-      if (!feeHead.isVariable) {
-        totalFixed = addInr(totalFixed, formatted);
+      if (!head.isVariable && (line.defaultAmount === undefined || line.defaultAmount === null)) {
+        throw new ValidationError(`Fixed fee head "${head.name}" must specify a default amount.`);
+      }
+
+      const amt = line.defaultAmount !== undefined && line.defaultAmount !== null
+        ? formatInr(line.defaultAmount)
+        : null;
+
+      if (amt !== null) {
+        total = addInr(total, amt);
       }
 
       lines.push({
         id: randomUUID(),
-        feeHeadId: feeHead.id,
-        feeHeadName: feeHead.name,
-        category: feeHead.category,
-        defaultAmount: feeHead.isVariable ? toDecimalInrString('0.00') : formatted,
-        isOptional: !!item.isOptional,
+        feeHeadId: head.id,
+        feeHeadCode: head.code,
+        feeHeadName: head.name,
+        category: head.category,
+        amount: amt,
+        isVariable: head.isVariable,
+        isOptional: line.isOptional ?? false,
       });
     }
 
-    const newStructure: FeeStructureDTO = {
-      id: structureId,
+    const existingStructures = (await this.repo.listFeeStructures(payload.academicYearId, actorSession))
+      .filter((s: any) => s.gradeLevelId === payload.gradeLevelId);
+    const nextVersion = existingStructures.length > 0 
+      ? Math.max(...existingStructures.map((s: any) => s.version)) + 1 
+      : 1;
+
+    const created = await this.repo.createFeeStructure(
+      {
+        id: randomUUID(),
+        academicYearId: payload.academicYearId,
+        gradeLevelId: payload.gradeLevelId,
+        version: nextVersion,
+        status: 'draft',
+        totalAmount: total,
+        lines,
+      },
+      actorSession
+    );
+
+    logger.info('Fee structure created in draft status', {
+      feeStructureId: created.id,
       academicYearId: payload.academicYearId,
       gradeLevelId: payload.gradeLevelId,
-      gradeLevelName: 'Grade Level', // Filled in detail
-      version: nextVersion,
-      status: 'draft',
-      approvedBy: null,
-      approvedAt: null,
-      lines,
-      totalFixedAmountInr: toDecimalInrString(totalFixed),
-    };
-
-    feeStructuresVault.set(structureId, newStructure);
-
-    logger.info('Fee structure draft created', {
-      feeStructureId: structureId,
-      academicYearId: payload.academicYearId,
-      gradeLevelId: payload.gradeLevelId,
-      version: nextVersion,
       actorStaffId: actorSession.staffId,
     });
 
-    return newStructure;
+    return created;
   }
 
   /**
-   * Approves a fee structure (Principal strictly).
-   * Freezes the structure and retires any previous approved version.
+   * Approves a fee structure (Principal only per BR-08 / US-19).
    */
   async approveFeeStructure(
     structureId: string,
@@ -430,69 +247,35 @@ export class FeeConfigurationService {
   ): Promise<FeeStructureDTO> {
     enforcePolicy(actorSession.role, 'fees:approve_structure');
 
-    const struct = feeStructuresVault.get(structureId);
-    if (!struct) {
-      throw new NotFoundError(`Fee structure with ID "${structureId}" not found.`);
-    }
-
-    // 1. Assert academic year writable
-    await academicYearsService.assertAcademicYearWritable(struct.academicYearId);
+    const struct = await this.getFeeStructureById(structureId);
 
     if (struct.status === 'approved') {
-      return struct; // Idempotent
+      throw new BusinessRuleError('Fee structure is already in approved state.');
     }
 
-    if (struct.status === 'retired') {
-      throw new BusinessRuleError('Cannot approve a retired fee structure.');
-    }
+    // Assert academic year is not closed
+    await academicYearsService.assertAcademicYearWritable(struct.academicYearId);
 
-    // 2. Retire any previously approved fee structure for the same year and grade
-    for (const [id, s] of feeStructuresVault.entries()) {
-      if (
-        s.academicYearId === struct.academicYearId &&
-        s.gradeLevelId === struct.gradeLevelId &&
-        s.status === 'approved' &&
-        id !== structureId
-      ) {
-        s.status = 'retired';
-        feeStructuresVault.set(id, s);
-        logger.info('Prior fee structure retired upon new approval', {
-          retiredStructureId: id,
-          gradeLevelId: s.gradeLevelId,
-        });
-      }
-    }
+    const approved = await this.repo.approveFeeStructure(structureId, actorSession);
 
-    const nowIso = new Date().toISOString();
-    struct.status = 'approved';
-    struct.approvedBy = actorSession.staffId;
-    struct.approvedAt = nowIso;
-    feeStructuresVault.set(structureId, struct);
-
-    logger.info('Fee structure formally approved by Principal', {
+    logger.info('Fee structure approved by Principal', {
       feeStructureId: structureId,
-      academicYearId: struct.academicYearId,
       gradeLevelId: struct.gradeLevelId,
-      version: struct.version,
       actorStaffId: actorSession.staffId,
     });
 
-    return struct;
+    return approved;
   }
 
   /**
-   * Lists transport rates.
+   * Lists transport distance rates.
    */
   async listTransportRates(academicYearId?: string): Promise<TransportRateDTO[]> {
-    let list = Array.from(transportRatesVault.values());
-    if (academicYearId) {
-      list = list.filter((r) => r.academicYearId === academicYearId);
-    }
-    return list;
+    return this.repo.listTransportRates(academicYearId);
   }
 
   /**
-   * Creates a transport rate (Accounts Officer or Principal).
+   * Creates a transport rate.
    */
   async createTransportRate(
     payload: CreateTransportRateDTO,
@@ -502,32 +285,40 @@ export class FeeConfigurationService {
 
     await academicYearsService.assertAcademicYearWritable(payload.academicYearId);
 
-    const place = payload.placeName.trim();
-    if (!place) {
-      throw new ValidationError('Place name is required.');
-    }
+    const cleanPlace = (payload as any).placeName || (payload as any).routeName || 'Default Route';
+    const rate = formatInr(payload.rateAmount || (payload as any).annualRate || '0.00');
 
-    const rate = formatInr(payload.rateAmount);
+    const created = await this.repo.createTransportRate(
+      {
+        id: randomUUID(),
+        academicYearId: payload.academicYearId,
+        routeName: cleanPlace,
+        distanceKm: (payload as any).distanceKm || 0,
+        annualRate: rate,
+        isActive: true,
+      },
+      actorSession
+    );
 
-    const newRate: TransportRateDTO = {
-      id: randomUUID(),
-      academicYearId: payload.academicYearId,
-      placeName: place,
-      mode: payload.mode,
-      rateAmount: rate,
-      isActive: true,
-    };
+    return created;
+  }
 
-    transportRatesVault.set(newRate.id, newRate);
-
-    logger.info('Transport rate created', {
-      transportRateId: newRate.id,
-      placeName: newRate.placeName,
-      rateAmount: newRate.rateAmount,
-      actorStaffId: actorSession.staffId,
-    });
-
-    return newRate;
+  /**
+   * Looks up the applicable transport rate.
+   */
+  async getTransportRate(
+    placeName: string,
+    mode: TransportMode,
+    academicYearId: string
+  ): Promise<TransportRateDTO | null> {
+    const rates = await this.repo.listTransportRates(academicYearId);
+    const found = rates.find(
+      (r) =>
+        r.academicYearId === academicYearId &&
+        r.routeName.toLowerCase() === placeName.toLowerCase() &&
+        r.isActive
+    );
+    return found || null;
   }
 }
 

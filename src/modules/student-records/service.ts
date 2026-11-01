@@ -31,17 +31,31 @@ import { documentsService } from '../documents/service';
 import { auditReportingService } from '../audit-reporting/service';
 import { logger } from '../../lib/logger';
 import { certificatesService } from '../certificates-lctc/service';
+import { IStudentRecordsRepository } from '../../infrastructure/repositories/interfaces';
+import { getRepositories } from '../../infrastructure/repositories/registry';
 import { AdmissionNumber, toDecimalInrString } from '../shared/types';
 
 // In-memory vault for student status history (fallback/testing)
 const studentStatusHistoryVault = new Map<string, StudentStatusHistoryItemDTO[]>(); // studentAcademicRecordId -> history
 
 export class StudentRecordsService {
+  private customRepo?: IStudentRecordsRepository;
+
+  constructor(customRepo?: IStudentRecordsRepository) {
+    this.customRepo = customRepo;
+  }
+
+  private get repo(): IStudentRecordsRepository {
+    return this.customRepo ?? getRepositories().studentRecords;
+  }
   /**
    * Resets status history for testing.
    */
   resetForTesting(): void {
     studentStatusHistoryVault.clear();
+    if (this.repo.resetForTesting) {
+      this.repo.resetForTesting();
+    }
   }
 
   /**
@@ -363,6 +377,9 @@ export class StudentRecordsService {
 
     // 6. Mutate status (seat is automatically freed because capacity queries exclude left/transferred/withdrawn)
     record.status = payload.newStatus;
+    if ((getRepositories().admissions as any).saveAcademicRecord) {
+      await (getRepositories().admissions as any).saveAcademicRecord(record);
+    }
 
     // 7. Record status transition history
     const historyItem: StudentStatusHistoryItemDTO = {

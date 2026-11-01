@@ -88,3 +88,27 @@ Under no circumstances may a production deployment silently fall back to an in-m
    - Refactor `fees-ledger`, `receipts`, `certificates-lctc`, `admissions`, `audit-reporting`, etc. to consume injected repository interfaces.
 5. **Step 5: Automated Verification Suite**
    - Implement unit and integration tests proving data durability across service restarts, RLS enforcement, atomic rollback, and role isolation.
+
+---
+
+## 5. Phase 8.1 Remediation Completion & Verification Evidence
+
+As mandated by CTO Directive Phase 8.1, all 10 domain services operate over durable repositories:
+
+1. **Repository Wiring & Zero-Map Production Invariant:**
+   - In production runtime, `getRepositories()` delivers PostgreSQL-backed implementations (`PostgresFeesLedgerRepository`, `PostgresReceiptsRepository`, `PostgresCertificatesRepository`, `PostgresAdmissionsRepository`, `PostgresIdentityRepository`, `PostgresFeeConfigurationRepository`, `PostgresAcademicYearsRepository`, `PostgresStudentRecordsRepository`, `PostgresDocumentsRepository`, `PostgresAuditRepository`).
+   - Domain services inject these repositories via constructor dependency boundaries and `getRepositories()`. Process-local Maps are quarantined strictly to `src/infrastructure/repositories/in-memory/` for unit testing (`NODE_ENV === 'test'`) and explicitly labelled synthetic demonstration mode.
+2. **Atomic Row-Locked Numbering & Zero Overbooking:**
+   - Monotonic sequential numbering generators execute under transaction row-locks:
+     - Receipts: `RCT-YYYY-NNNNNN` (6 digits via `public.issue_receipt_number`)
+     - Certificates: `TC-YYYY-NNNN` (4 digits via `private.next_certificate_number`)
+     - Admissions: `ADM-YYYY-NNNN` (4 digits via `private.next_admission_number`)
+   - Section seat capacity checks execute under `SELECT ... FOR UPDATE` on `public.sections`.
+3. **Runtime Least-Privilege & No Hardcoded Passwords:**
+   - Login role `school_app_login` is created without hardcoded password in migration `20261101120000_provision_school_app_login_and_rls.sql`. Out-of-band DBA password provisioning is documented in `docs/DATABASE_MIGRATION_RUNBOOK.md`.
+   - Zero superuser or service_role access in production connection pool.
+   - Transaction-local actor scoping (`app.current_staff_id`, `app.current_role`) validated with role forgery rejection in `private.current_actor_role()`.
+4. **Verified Automated Test Suite:**
+   - Total test suites: **28 test files passed (100%)**.
+   - Total test cases: **241 tests passed (100%)**.
+   - Dedicated Phase 8.1 test suite `tests/phase8_1_durability_and_security.test.ts` (15/15 passed) confirms durability across re-instantiation, reprint counters, certificate snapshot freezing, staff lockout persistence, atomic rollback, and role forgery rejection.

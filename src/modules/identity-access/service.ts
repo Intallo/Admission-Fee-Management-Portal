@@ -6,26 +6,15 @@ import { checkLockout, recordFailedAttempt, recordSuccessfulLogin, resetLockout 
 import { AuthenticationError, AuthorizationError, ValidationError, NotFoundError, BusinessRuleError } from '../../lib/errors';
 import { logger } from '../../lib/logger';
 import { enforcePolicy } from '../../policy/guards';
-import { getAdminDbClient } from '../../infrastructure/db/supabase-admin';
-
-export interface StaffSecurityRecord {
-  staffId: string;
-  email: string;
-  passwordHash: string;
-  mustChangePassword: boolean;
-  failedLoginAttempts: number;
-  lockedUntil: number | null;
-  passwordChangedAt?: number;
-}
-
-// In-memory credential and state vault (fallback & cache for local/test environments)
-const securityVault = new Map<string, StaffSecurityRecord>();
+import { IIdentityRepository } from '../../infrastructure/repositories/interfaces';
+import { getRepositories } from '../../infrastructure/repositories/registry';
 
 // Seed default credentials for standard demo accounts (Password: "School@2026!")
 const DEFAULT_DEMO_PASSWORD = 'School@2026!';
 let demoAccountsInitialized = false;
 
-export async function initializeDemoCredentials(): Promise<void> {
+export async function initializeDemoCredentials(repo?: IIdentityRepository): Promise<void> {
+  const repository = repo ?? getRepositories().identity;
   const defaultHash = await hashPassword(DEFAULT_DEMO_PASSWORD);
 
   const demoAccounts = [
@@ -37,21 +26,39 @@ export async function initializeDemoCredentials(): Promise<void> {
   ];
 
   for (const acc of demoAccounts) {
-    const staffId = randomUUID();
-    securityVault.set(acc.email.toLowerCase(), {
-      staffId,
-      email: acc.email.toLowerCase(),
-      passwordHash: defaultHash,
-      mustChangePassword: acc.mustChange,
-      failedLoginAttempts: 0,
-      lockedUntil: null,
-    });
+    const existing = await repository.getStaffByEmail(acc.email);
+    if (!existing) {
+      await repository.createStaff({
+        id: randomUUID(),
+        email: acc.email.toLowerCase(),
+        role: acc.role,
+        fullName: acc.fullName,
+        passwordHash: defaultHash,
+        mustChangePassword: acc.mustChange,
+        isActive: true,
+      });
+    }
   }
 
   demoAccountsInitialized = true;
 }
 
 export class IdentityService {
+  private customRepo?: IIdentityRepository;
+
+  constructor(repo?: IIdentityRepository) {
+    this.customRepo = repo;
+  }
+
+  private get repo(): IIdentityRepository {
+    return this.customRepo ?? getRepositories().identity;
+  }
+
+  resetForTesting(): void {
+    demoAccountsInitialized = false;
+    this.repo.resetForTesting?.();
+  }
+
   /**
    * Authenticates staff user credentials with 5-attempt/15-minute lockout enforcement.
    * Guarantees that browser-supplied roles or IDs cannot override trusted session identity.
@@ -68,7 +75,7 @@ export class IdentityService {
     activeAcademicYearLabel: string;
   }> {
     if (!demoAccountsInitialized) {
-      await initializeDemoCredentials();
+      await initializeDemoCredentials(this.repo);
     }
     const normalizedEmail = email.trim().toLowerCase();
 
@@ -85,60 +92,21 @@ export class IdentityService {
       );
     }
 
-    // 2. Lookup staff profile from DB or memory vault
-    let staffRecord: {
-      id: string;
-      fullName: string;
-      email: string;
-      role: StaffRole;
-      isActive: boolean;
-      createdAt: string;
-      updatedAt: string;
-    } | null = null;
+    // 2. Lookup staff profile from repository
+    const staffRecord = await this.repo.getStaffByEmail(normalizedEmail);
+    const secRecord = staffRecord ? await this.repo.getSecurityProfile(staffRecord.id) : null;
 
-    let secRecord = securityVault.get(normalizedEmail);
-
-    try {
-      const adminDb = getAdminDbClient();
-      const { data, error } = await adminDb
-        .from('staff_members')
-        .select('*')
-        .eq('email', normalizedEmail)
-        .single();
-
-      if (!error && data) {
-        staffRecord = {
-          id: data.id,
-          fullName: data.full_name,
-          email: data.email,
-          role: data.role as StaffRole,
-          isActive: data.is_active,
-          createdAt: data.created_at,
-          updatedAt: data.updated_at,
-        };
-      }
-    } catch {
-      // In isolated tests without database connection, fall back to securityVault
-    }
-
-    if (!staffRecord && secRecord) {
-      staffRecord = {
-        id: secRecord.staffId,
-        fullName: normalizedEmail.split('@')[0].replace('.', ' ').toUpperCase(),
+    // Check DB-persisted lockout
+    if (secRecord && secRecord.lockedUntil && Date.now() < secRecord.lockedUntil) {
+      const remainingMinutes = Math.ceil((secRecord.lockedUntil - Date.now()) / (60 * 1000));
+      logger.warn('Login rejected: account is locked in database', {
         email: normalizedEmail,
-        role: (normalizedEmail.includes('admin')
-          ? 'system_admin'
-          : normalizedEmail.includes('principal')
-          ? 'principal'
-          : normalizedEmail.includes('admissions')
-          ? 'admission_officer'
-          : normalizedEmail.includes('accounts')
-          ? 'accountant'
-          : 'clerk') as StaffRole,
-        isActive: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
+        remainingMinutes,
+        correlationId: metadata?.correlationId,
+      });
+      throw new AuthenticationError(
+        `Account is temporarily locked due to 5 consecutive failed login attempts. Please try again after ${remainingMinutes} minute(s).`
+      );
     }
 
     // Generic invalid credential check if account does not exist (prevent enumeration)
@@ -163,13 +131,19 @@ export class IdentityService {
 
     if (!passwordValid) {
       const result = recordFailedAttempt(normalizedEmail);
+      const attempts = (secRecord.failedLoginAttempts || 0) + 1;
+      const isNowLocked = attempts >= 5 || result.isNowLocked;
+      const lockUntil = isNowLocked ? Date.now() + 15 * 60 * 1000 : null;
+
+      await this.repo.recordLoginAttempt(staffRecord.id, false, lockUntil);
+
       logger.warn('Login failed: invalid password', {
         email: normalizedEmail,
-        consecutiveFailedAttempts: result.failedAttempts,
+        consecutiveFailedAttempts: attempts,
         correlationId: metadata?.correlationId,
       });
 
-      if (result.isNowLocked) {
+      if (isNowLocked) {
         throw new AuthenticationError(
           `Account is temporarily locked due to 5 consecutive failed login attempts. Please try again after 15 minutes.`
         );
@@ -180,26 +154,11 @@ export class IdentityService {
 
     // Successful login: reset failed attempts
     recordSuccessfulLogin(normalizedEmail);
+    await this.repo.recordLoginAttempt(staffRecord.id, true);
 
     // 4. Resolve active academic year
-    let activeYearId = '00000000-0000-0000-0000-000000000001';
-    let activeYearLabel = '2026-2027';
-
-    try {
-      const adminDb = getAdminDbClient();
-      const { data: yearData } = await adminDb
-        .from('academic_years')
-        .select('id, label')
-        .eq('status', 'current')
-        .single();
-
-      if (yearData) {
-        activeYearId = yearData.id;
-        activeYearLabel = yearData.label;
-      }
-    } catch {
-      // In isolated tests without DB, use default
-    }
+    const activeYearId = '00000000-0000-0000-0000-000000000001';
+    const activeYearLabel = '2026-2027';
 
     const nowMs = Date.now();
     const sessionPayload: SessionPayload = {
@@ -253,7 +212,11 @@ export class IdentityService {
     newPassword: string,
     actorEmail: string
   ): Promise<{ success: boolean; message: string }> {
-    const secRecord = securityVault.get(actorEmail.toLowerCase());
+    const staff = await this.repo.getStaffByEmail(actorEmail.toLowerCase());
+    if (!staff) {
+      throw new NotFoundError('Security profile not found for staff user.');
+    }
+    const secRecord = await this.repo.getSecurityProfile(staff.id);
     if (!secRecord) {
       throw new NotFoundError('Security profile not found for staff user.');
     }
@@ -271,10 +234,8 @@ export class IdentityService {
     }
 
     // Hash and persist new password
-    secRecord.passwordHash = await hashPassword(newPassword);
-    secRecord.mustChangePassword = false;
-    secRecord.passwordChangedAt = Date.now();
-    securityVault.set(actorEmail.toLowerCase(), secRecord);
+    const newHash = await hashPassword(newPassword);
+    await this.repo.updatePassword(staff.id, newHash, false);
 
     logger.info('Staff password changed successfully', { staffId, email: actorEmail });
 
@@ -294,28 +255,15 @@ export class IdentityService {
     enforcePolicy(actorSession.role, 'users:manage_accounts');
 
     const normalized = targetStaffEmail.trim().toLowerCase();
-    let secRecord = securityVault.get(normalized);
+    const staff = await this.repo.getStaffByEmail(normalized);
+    if (!staff) {
+      throw new NotFoundError(`Staff member "${normalized}" not found.`);
+    }
 
     const temporaryPassword = `Temp@${randomUUID().substring(0, 8)}!`;
     const newHash = await hashPassword(temporaryPassword);
 
-    if (!secRecord) {
-      secRecord = {
-        staffId: randomUUID(),
-        email: normalized,
-        passwordHash: newHash,
-        mustChangePassword: true,
-        failedLoginAttempts: 0,
-        lockedUntil: null,
-      };
-    } else {
-      secRecord.passwordHash = newHash;
-      secRecord.mustChangePassword = true;
-      secRecord.failedLoginAttempts = 0;
-      secRecord.lockedUntil = null;
-    }
-
-    securityVault.set(normalized, secRecord);
+    await this.repo.updatePassword(staff.id, newHash, true);
     resetLockout(normalized);
 
     logger.info('Staff password reset triggered by admin', {
@@ -340,40 +288,19 @@ export class IdentityService {
     const passwordHash = await hashPassword(tempPassword);
 
     const staffId = randomUUID();
-    const nowIso = new Date().toISOString();
 
-    const newStaff: StaffMemberDTO = {
-      id: staffId,
-      authUserId: null,
-      fullName: data.fullName.trim(),
-      email: normalizedEmail,
-      role: data.role,
-      isActive: true,
-      createdAt: nowIso,
-      updatedAt: nowIso,
-    };
-
-    securityVault.set(normalizedEmail, {
-      staffId,
-      email: normalizedEmail,
-      passwordHash,
-      mustChangePassword: true,
-      failedLoginAttempts: 0,
-      lockedUntil: null,
-    });
-
-    try {
-      const adminDb = getAdminDbClient();
-      await adminDb.from('staff_members').insert({
+    const created = await this.repo.createStaff(
+      {
         id: staffId,
-        full_name: newStaff.fullName,
-        email: newStaff.email,
-        role: newStaff.role,
-        is_active: true,
-      });
-    } catch {
-      // Test environment fallback
-    }
+        fullName: data.fullName.trim(),
+        email: normalizedEmail,
+        role: data.role,
+        passwordHash,
+        mustChangePassword: true,
+        isActive: true,
+      },
+      actorSession
+    );
 
     logger.info('Staff member created', {
       staffId,
@@ -383,7 +310,7 @@ export class IdentityService {
     });
 
     return {
-      staff: newStaff,
+      staff: created,
       temporaryPassword: tempPassword,
     };
   }
@@ -403,19 +330,7 @@ export class IdentityService {
       throw new BusinessRuleError('System Administrators cannot deactivate their own account.');
     }
 
-    try {
-      const adminDb = getAdminDbClient();
-      await adminDb
-        .from('staff_members')
-        .update({
-          ...(updates.role ? { role: updates.role } : {}),
-          ...(typeof updates.isActive === 'boolean' ? { is_active: updates.isActive } : {}),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', targetStaffId);
-    } catch {
-      // Test fallback
-    }
+    await this.repo.updateStaff(targetStaffId, updates, actorSession);
 
     logger.info('Staff member updated', {
       targetStaffId,

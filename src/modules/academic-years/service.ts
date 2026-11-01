@@ -3,81 +3,44 @@ import { AcademicYearDTO, AcademicYearState } from './types';
 import { AuthenticatedUserSession } from '../identity-access/types';
 import { BusinessRuleError, AuthorizationError, NotFoundError, ValidationError } from '../../lib/errors';
 import { logger } from '../../lib/logger';
-import { getAdminDbClient } from '../../infrastructure/db/supabase-admin';
-
-// In-memory store for fallback/tests
-const academicYearsVault: AcademicYearDTO[] = [
-  {
-    id: '00000000-0000-0000-0000-000000000000',
-    label: '2025-2026',
-    startDate: '2025-06-01',
-    endDate: '2026-05-31',
-    status: 'closed',
-    notes: 'Prior academic year (closed and immutable).',
-    createdAt: '2025-06-01T00:00:00.000Z',
-    updatedAt: '2026-05-31T23:59:59.000Z',
-  },
-  {
-    id: '00000000-0000-0000-0000-000000000001',
-    label: '2026-2027',
-    startDate: '2026-06-01',
-    endDate: '2027-05-31',
-    status: 'current',
-    notes: 'Current active academic year.',
-    createdAt: '2026-06-01T00:00:00.000Z',
-    updatedAt: '2026-06-01T00:00:00.000Z',
-  },
-];
+import { IAcademicYearsRepository } from '../../infrastructure/repositories/interfaces';
+import { getRepositories } from '../../infrastructure/repositories/registry';
 
 export class AcademicYearsService {
+  private customRepo?: IAcademicYearsRepository;
+
+  constructor(repo?: IAcademicYearsRepository) {
+    this.customRepo = repo;
+  }
+
+  private get repo(): IAcademicYearsRepository {
+    return this.customRepo ?? getRepositories().academicYears;
+  }
+
+  resetForTesting(): void {
+    this.repo.resetForTesting?.();
+  }
+
   /**
    * Retrieves all academic years.
    */
-  async listAcademicYears(): Promise<AcademicYearDTO[]> {
-    try {
-      const adminDb = getAdminDbClient();
-      const { data, error } = await adminDb
-        .from('academic_years')
-        .select('*')
-        .order('start_date', { ascending: false });
-
-      if (!error && data && data.length > 0) {
-        return data.map((d: any) => ({
-          id: d.id,
-          label: d.label,
-          startDate: d.start_date,
-          endDate: d.end_date,
-          status: d.status as AcademicYearState,
-          notes: d.notes,
-          createdAt: d.created_at,
-          updatedAt: d.updated_at,
-        }));
-      }
-    } catch {
-      // Test environment fallback
-    }
-
-    return [...academicYearsVault];
+  async listAcademicYears(session?: AuthenticatedUserSession): Promise<AcademicYearDTO[]> {
+    return this.repo.listAcademicYears(session);
   }
 
   /**
    * Retrieves a single academic year by ID.
    */
-  async getAcademicYearById(yearId: string): Promise<AcademicYearDTO> {
-    const list = await this.listAcademicYears();
-    const found = list.find((y) => y.id === yearId);
-    if (!found) {
-      throw new NotFoundError(`Academic year with ID "${yearId}" not found.`);
-    }
-    return found;
+  async getAcademicYearById(yearId: string, session?: AuthenticatedUserSession): Promise<AcademicYearDTO> {
+    return this.repo.getAcademicYearById(yearId, session);
   }
 
   /**
    * Asserts that the academic year is writable (not closed).
    * Enforces SBR-05 / BR-39: Closed years block any further business mutations.
    */
-  async assertAcademicYearWritable(yearId: string): Promise<AcademicYearDTO> {
-    const year = await this.getAcademicYearById(yearId);
+  async assertAcademicYearWritable(yearId: string, session?: AuthenticatedUserSession): Promise<AcademicYearDTO> {
+    const year = await this.getAcademicYearById(yearId, session);
 
     if (year.status === 'closed') {
       throw new BusinessRuleError(
@@ -91,8 +54,8 @@ export class AcademicYearsService {
   /**
    * Alias for asserting that the academic year is not closed.
    */
-  async assertYearIsNotClosed(yearId: string): Promise<AcademicYearDTO> {
-    return this.assertAcademicYearWritable(yearId);
+  async assertYearIsNotClosed(yearId: string, session?: AuthenticatedUserSession): Promise<AcademicYearDTO> {
+    return this.assertAcademicYearWritable(yearId, session);
   }
 
   /**
@@ -117,7 +80,7 @@ export class AcademicYearsService {
       throw new ValidationError('Start date must be strictly before end date.');
     }
 
-    const existingYears = await this.listAcademicYears();
+    const existingYears = await this.listAcademicYears(actorSession);
 
     // 2. Duplicate label check
     if (existingYears.some((y) => y.label.trim().toLowerCase() === payload.label.trim().toLowerCase())) {
@@ -140,42 +103,24 @@ export class AcademicYearsService {
       }
     }
 
-    const id = randomUUID();
-    const nowIso = new Date().toISOString();
-    const newYear: AcademicYearDTO = {
-      id,
-      label: payload.label.trim(),
-      startDate: payload.startDate,
-      endDate: payload.endDate,
-      status: 'planning', // Initial state must be planning
-      notes: payload.notes || null,
-      createdAt: nowIso,
-      updatedAt: nowIso,
-    };
-
-    academicYearsVault.push(newYear);
-
-    try {
-      const adminDb = getAdminDbClient();
-      await adminDb.from('academic_years').insert({
-        id: newYear.id,
-        label: newYear.label,
-        start_date: newYear.startDate,
-        end_date: newYear.endDate,
-        status: newYear.status,
-        notes: newYear.notes,
-      });
-    } catch {
-      // Test environment fallback
-    }
+    const created = await this.repo.createAcademicYear(
+      {
+        label: payload.label.trim(),
+        startDate: payload.startDate,
+        endDate: payload.endDate,
+        status: 'planning',
+        notes: payload.notes || null,
+      },
+      actorSession
+    );
 
     logger.info('New academic year created in planning state', {
-      academicYearId: id,
-      label: newYear.label,
+      academicYearId: created.id,
+      label: created.label,
       actorStaffId: actorSession.staffId,
     });
 
-    return newYear;
+    return created;
   }
 
   /**
@@ -189,40 +134,40 @@ export class AcademicYearsService {
       throw new AuthorizationError('Only the Principal possesses authority to formally close an academic year.');
     }
 
-    const year = await this.getAcademicYearById(yearId);
+    const year = await this.getAcademicYearById(yearId, actorSession);
 
     if (year.status === 'closed') {
       throw new BusinessRuleError(`Academic Year "${year.label}" is already closed.`);
     }
 
-    year.status = 'closed';
-    year.updatedAt = new Date().toISOString();
-
-    const idx = academicYearsVault.findIndex((y) => y.id === yearId);
-    if (idx !== -1) {
-      academicYearsVault[idx] = { ...year };
-    }
-
-    try {
-      const adminDb = getAdminDbClient();
-      await adminDb
-        .from('academic_years')
-        .update({
-          status: 'closed',
-          updated_at: year.updatedAt,
-        })
-        .eq('id', yearId);
-    } catch {
-      // Test environment fallback
-    }
+    const closed = await this.repo.closeAcademicYear(yearId, actorSession);
 
     logger.info('Academic year formally closed', {
       academicYearId: yearId,
-      label: year.label,
+      label: closed.label,
       actorStaffId: actorSession.staffId,
     });
 
-    return year;
+    return closed;
+  }
+
+  async listGradeLevels(session?: AuthenticatedUserSession): Promise<any[]> {
+    return this.repo.listGradeLevels(session);
+  }
+
+  async listSections(academicYearId?: string, session?: AuthenticatedUserSession): Promise<any[]> {
+    return this.repo.listSections(academicYearId, session);
+  }
+
+  async getSectionById(sectionId: string, session?: AuthenticatedUserSession): Promise<any> {
+    return this.repo.getSectionById(sectionId, session);
+  }
+
+  async updateSectionCapacity(sectionId: string, maxCapacity: number, session: AuthenticatedUserSession): Promise<any> {
+    if (session.role !== 'principal') {
+      throw new AuthorizationError('Only the Principal holds authority to update section seat capacity.');
+    }
+    return this.repo.updateSectionCapacity(sectionId, maxCapacity, session);
   }
 }
 

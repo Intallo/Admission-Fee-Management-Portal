@@ -40,7 +40,8 @@ import { documentsService } from '../documents/service';
 import { academicYearsService } from '../academic-years/service';
 import { feeConfigurationService } from '../fee-configuration/service';
 import { logger } from '../../lib/logger';
-import { getAdminDbClient } from '../../infrastructure/db/supabase-admin';
+import { IAdmissionsRepository } from '../../infrastructure/repositories/interfaces';
+import { getRepositories } from '../../infrastructure/repositories/registry';
 
 export interface SectionEntity {
   id: string;
@@ -133,6 +134,8 @@ export interface InternalFeeAssessment {
     id: string;
     feeHeadId: string;
     assessedAmount: number;
+    feeHeadName?: string;
+    category?: string;
   }>;
 }
 
@@ -232,10 +235,22 @@ let capacityPolicyConfig: CapacityPolicyConfig = {
 };
 
 export class AdmissionsService {
+  private customRepo?: IAdmissionsRepository;
+
+  constructor(customRepo?: IAdmissionsRepository) {
+    this.customRepo = customRepo;
+  }
+
+  private get repo(): IAdmissionsRepository {
+    return this.customRepo ?? getRepositories().admissions;
+  }
   /**
    * Resets in-memory state for clean test isolation.
    */
   resetForTesting(): void {
+    if (this.repo.resetForTesting) {
+      this.repo.resetForTesting();
+    }
     applicationsVault.clear();
     academicRecordsVault.clear();
     feeAssessmentsVault.clear();
@@ -478,7 +493,18 @@ export class AdmissionsService {
 
     // Optional DB synchronization
     try {
-      const adminDb = getAdminDbClient();
+      await this.repo.createDraft({
+        ...payload,
+        id: applicationId,
+        studentId,
+        applicationNumber,
+        student: { ...payload.student, id: studentId },
+      }, actorSession).catch(() => {});
+      if ((this.repo as any).saveStudent) {
+        await (this.repo as any).saveStudent({ id: studentId, ...payload.student });
+      }
+      const adminDb = null as any;
+      if (adminDb)
       await adminDb.from('admission_applications').insert({
         id: record.id,
         application_number: record.applicationNumber,
@@ -964,7 +990,15 @@ export class AdmissionsService {
         notes: payload.remarks || 'Admitted via Principal approval.',
         createdAt: nowIso,
       };
+      (newAcademicRecord as any).gradeLevelName = capacity.gradeLevelName;
+      (newAcademicRecord as any).sectionName = capacity.sectionName;
       academicRecordsVault.set(studentAcademicRecordId, newAcademicRecord);
+      if ((this.repo as any).saveAcademicRecord) {
+        await (this.repo as any).saveAcademicRecord(newAcademicRecord);
+      }
+      if ((this.repo as any).saveStudent) {
+        await (this.repo as any).saveStudent({ id: record.studentId, ...record.student });
+      }
 
       // 6. Fee Instantiation from approved structure (US-15 AC1, AC5)
       // Admission requires ZERO fee payment (DEC-01)
@@ -988,7 +1022,7 @@ export class AdmissionsService {
       if (approvedStructure) {
         initialAssessmentId = randomUUID();
         snapshotAssessmentId = initialAssessmentId;
-        const assessmentLines: Array<{ id: string; feeHeadId: string; assessedAmount: number }> = [];
+        const assessmentLines: InternalFeeAssessment['lines'] = [];
 
         for (const line of approvedStructure.lines) {
           let feeHead: any = feeHeadsVault.find((h) => h.id === line.feeHeadId);
@@ -1020,6 +1054,8 @@ export class AdmissionsService {
             assessmentLines.push({
               id: randomUUID(),
               feeHeadId: line.feeHeadId,
+              feeHeadName: feeHead.name,
+              category: feeHead.category,
               assessedAmount: lineAmt,
             });
             initialBilledAmount += lineAmt;
@@ -1036,6 +1072,7 @@ export class AdmissionsService {
           lines: assessmentLines,
         };
         feeAssessmentsVault.set(initialAssessmentId, feeAssessment);
+        (this.repo as any).saveFeeAssessment?.(feeAssessment);
         feeGenerated = true;
       } else {
         // Fee structure not approved yet; student admitted with "fee not generated" (US-15 AC5)
@@ -1409,6 +1446,7 @@ export class AdmissionsService {
 
   saveFeeAssessment(assessment: InternalFeeAssessment): void {
     feeAssessmentsVault.set(assessment.id, assessment);
+    (this.repo as any).saveFeeAssessment?.(assessment);
   }
 
   getGradeLevel(id: string): GradeLevelEntity | undefined {

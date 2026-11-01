@@ -3,7 +3,7 @@ import { requireRole } from '@/auth/guards';
 import { identityService } from '@/modules/identity-access/service';
 import { formatErrorResponse } from '@/lib/errors';
 import { getOrCreateCorrelationId } from '@/lib/correlation';
-import { getAdminDbClient } from '@/infrastructure/db/supabase-admin';
+import { getRepositories } from '@/infrastructure/repositories';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,14 +18,9 @@ export async function POST(
 
     let targetEmail = '';
     try {
-      const adminDb = getAdminDbClient();
-      const { data } = await adminDb
-        .from('staff_members')
-        .select('email')
-        .eq('id', params.id)
-        .single();
-      if (data) {
-        targetEmail = data.email;
+      const staff = await getRepositories().identity.getStaffById(params.id);
+      if (staff) {
+        targetEmail = staff.email;
       }
     } catch {
       // Test fallback

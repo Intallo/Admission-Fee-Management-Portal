@@ -28,7 +28,7 @@ In accordance with signed BRD v1.4 Section 6.3, signed SRS v1.4 Section 1.3, and
 - [x] **Zero Leaked Secrets in Repository:** Complete scan of source tree, git history, and build manifests reveals zero committed production passwords, private keys, or API secrets.
 
 ### 2.2 Automated Test Execution & Evidence
-- [x] **100% Test Pass Rate (In-Memory Tier):** Vitest test suite executes 27 test files with 226 total tests; **226 passed, 0 failed, 0 skipped** across domain rules, Zod schemas, RBAC guards, PII masking, and Phase 8 persistence/privilege controls.
+- [x] **100% Test Pass Rate (In-Memory Tier):** Vitest test suite executes 28 test files with 241 total tests; **241 passed, 0 failed, 0 skipped** across domain rules, Zod schemas, RBAC guards, PII masking, Phase 8 persistence/privilege controls, and Phase 8.1 durability/security tests.
 - [x] **Full Security Test Suite:** Dedicated [`tests/security_verification.test.ts`](file:///tests/security_verification.test.ts) (23 tests) passes with 100% success.
 - [x] **Database Constraint & Integrity Tests (PostgreSQL Tier):** SQL test suites (`integrity_tests.sql`, `verification.sql`, `us33_ac2_least_privilege_tests.sql`) pass 100% of assertion checks against PostgreSQL engine via `psql`.
 

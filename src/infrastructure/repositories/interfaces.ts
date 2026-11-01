@@ -1,5 +1,82 @@
 import { AuthenticatedUserSession } from '../../modules/identity-access/types';
 
+export interface IIdentityRepository {
+  getStaffByEmail(email: string): Promise<any | null>;
+  getStaffById(staffId: string): Promise<any | null>;
+  getSecurityProfile(staffId: string): Promise<any | null>;
+  recordLoginAttempt(staffId: string, success: boolean, lockedUntil?: number | null): Promise<void>;
+  updatePassword(staffId: string, passwordHash: string, mustChangePassword: boolean): Promise<void>;
+  listStaff(session?: AuthenticatedUserSession): Promise<any[]>;
+  createStaff(data: any, session?: AuthenticatedUserSession): Promise<any>;
+  updateStaff(staffId: string, data: any, session?: AuthenticatedUserSession): Promise<any>;
+  resetForTesting?(): void;
+}
+
+export interface IAcademicYearsRepository {
+  listAcademicYears(session?: AuthenticatedUserSession): Promise<any[]>;
+  getAcademicYearById(yearId: string, session?: AuthenticatedUserSession): Promise<any>;
+  createAcademicYear(data: any, session?: AuthenticatedUserSession): Promise<any>;
+  closeAcademicYear(yearId: string, session?: AuthenticatedUserSession): Promise<any>;
+  listGradeLevels(session?: AuthenticatedUserSession): Promise<any[]>;
+  listSections(academicYearId?: string, session?: AuthenticatedUserSession): Promise<any[]>;
+  getSectionById(sectionId: string, session?: AuthenticatedUserSession): Promise<any>;
+  updateSectionCapacity(sectionId: string, maxCapacity: number, session?: AuthenticatedUserSession): Promise<any>;
+  resetForTesting?(): void;
+}
+
+export interface IAdmissionsRepository {
+  getNextApplicationNumber(academicYearId: string, yearLabel: string, session?: AuthenticatedUserSession): Promise<string>;
+  getNextAdmissionNumber(academicYearId: string, yearLabel: string, session?: AuthenticatedUserSession): Promise<string>;
+  createDraft(payload: any, session?: AuthenticatedUserSession): Promise<any>;
+  updateDraft(applicationId: string, payload: any, session?: AuthenticatedUserSession): Promise<any>;
+  submitApplication(applicationId: string, session?: AuthenticatedUserSession): Promise<any>;
+  reviewApplication(
+    applicationId: string,
+    payload: any,
+    session?: AuthenticatedUserSession
+  ): Promise<any>;
+  rejectApplication(applicationId: string, payload: any, session?: AuthenticatedUserSession): Promise<any>;
+  getApplicationById(applicationId: string, session?: AuthenticatedUserSession): Promise<any>;
+  listApplications(filter: any, session?: AuthenticatedUserSession): Promise<any>;
+  checkCapacity(sectionId: string, academicYearId: string, session?: AuthenticatedUserSession): Promise<any>;
+  approveApplication(
+    applicationId: string,
+    payload: any,
+    session?: AuthenticatedUserSession
+  ): Promise<any>;
+  getAcademicRecordById(recordId: string, session?: AuthenticatedUserSession): Promise<any>;
+  listAcademicRecordsForYear(academicYearId: string, session?: AuthenticatedUserSession): Promise<any[]>;
+  getAllAcademicRecords(session?: AuthenticatedUserSession): Promise<any[]>;
+  getStudentById(studentId: string, session?: AuthenticatedUserSession): Promise<any>;
+  getApplicationByRecordId(recordId: string, session?: AuthenticatedUserSession): Promise<any>;
+  saveAcademicRecord?(record: any): Promise<void>;
+  saveStudent?(student: any): Promise<void>;
+  saveFeeAssessment?(assessment: any): Promise<void>;
+  getFeeAssessmentByRecordId?(studentAcademicRecordId: string): Promise<any>;
+  resetForTesting?(): void;
+}
+
+export interface IStudentRecordsRepository {
+  searchStudents(filter: any, session: AuthenticatedUserSession): Promise<{ data: any[]; total: number }>;
+  getStudentProfile(recordId: string, session: AuthenticatedUserSession): Promise<any>;
+  updateStudentStatus(recordId: string, status: any, reason: string, session: AuthenticatedUserSession): Promise<any>;
+  getStatusHistory(recordId: string, session?: AuthenticatedUserSession): Promise<any[]>;
+  resetForTesting?(): void;
+}
+
+export interface IFeeConfigurationRepository {
+  listFeeHeads(session?: AuthenticatedUserSession): Promise<any[]>;
+  createFeeHead(payload: any, session?: AuthenticatedUserSession): Promise<any>;
+  listFeeStructures(academicYearId?: string, session?: AuthenticatedUserSession): Promise<any[]>;
+  getFeeStructureById(id: string, session?: AuthenticatedUserSession): Promise<any>;
+  getFeeStructureForGrade(academicYearId: string, gradeLevelId: string, session?: AuthenticatedUserSession): Promise<any>;
+  createFeeStructure(payload: any, session?: AuthenticatedUserSession): Promise<any>;
+  approveFeeStructure(id: string, session?: AuthenticatedUserSession): Promise<any>;
+  listTransportRates(academicYearId?: string, session?: AuthenticatedUserSession): Promise<any[]>;
+  createTransportRate(payload: any, session?: AuthenticatedUserSession): Promise<any>;
+  resetForTesting?(): void;
+}
+
 export interface IFeesLedgerRepository {
   getStudentDuesSummary(
     studentAcademicRecordId: string,
@@ -8,6 +85,12 @@ export interface IFeesLedgerRepository {
   ): Promise<any>;
 
   recordOfflinePayment(
+    params: any,
+    idempotencyKey?: string,
+    session?: AuthenticatedUserSession
+  ): Promise<any>;
+
+  recordPayment(
     params: any,
     idempotencyKey?: string,
     session?: AuthenticatedUserSession
@@ -32,6 +115,8 @@ export interface IFeesLedgerRepository {
   getPaymentById(paymentId: string, session?: AuthenticatedUserSession): Promise<any>;
   listPaymentsForRecord(studentAcademicRecordId: string, session?: AuthenticatedUserSession): Promise<any[]>;
   getAllAllocations(session?: AuthenticatedUserSession): Promise<any[]>;
+  getAllAdjustments(session?: AuthenticatedUserSession): Promise<any[]>;
+  resetForTesting?(): void;
 }
 
 export interface IReceiptsRepository {
@@ -50,10 +135,12 @@ export interface IReceiptsRepository {
     reason: string,
     session?: AuthenticatedUserSession
   ): Promise<any>;
+  resetForTesting?(): void;
 }
 
 export interface ICertificatesRepository {
-  prepopulateCertificate(studentAcademicRecordId: string, session?: AuthenticatedUserSession): Promise<any>;
+  getNextCertificateNumber(prefix?: string, session?: AuthenticatedUserSession): Promise<string>;
+  prepopulateCertificate(studentAcademicRecordId: string, session?: AuthenticatedUserSession, extra?: any): Promise<any>;
   getCertificateById(certificateId: string, session?: AuthenticatedUserSession): Promise<any>;
   getCertificateByStudentRecordId(studentRecordId: string, session?: AuthenticatedUserSession): Promise<any>;
   reviewCertificate(
@@ -71,29 +158,26 @@ export interface ICertificatesRepository {
     reason: string,
     session?: AuthenticatedUserSession
   ): Promise<any>;
+  listCertificates(filter?: any, session?: AuthenticatedUserSession): Promise<any>;
+  resetForTesting?(): void;
 }
 
-export interface IAdmissionsRepository {
-  getNextApplicationNumber(academicYearId: string, yearLabel: string, session?: AuthenticatedUserSession): Promise<string>;
-  getNextAdmissionNumber(academicYearId: string, yearLabel: string, session?: AuthenticatedUserSession): Promise<string>;
-  createDraft(payload: any, session?: AuthenticatedUserSession): Promise<any>;
-  updateDraft(applicationId: string, payload: any, session?: AuthenticatedUserSession): Promise<any>;
-  getApplicationById(applicationId: string, session?: AuthenticatedUserSession): Promise<any>;
-  listApplications(filter: any, session?: AuthenticatedUserSession): Promise<any>;
-  checkCapacity(sectionId: string, academicYearId: string, session?: AuthenticatedUserSession): Promise<any>;
-  approveApplication(
-    applicationId: string,
-    payload: any,
-    session?: AuthenticatedUserSession
-  ): Promise<any>;
-  getAcademicRecordById(recordId: string, session?: AuthenticatedUserSession): Promise<any>;
-  listAcademicRecordsForYear(academicYearId: string, session?: AuthenticatedUserSession): Promise<any[]>;
+export interface IDocumentsRepository {
+  listDocumentTypes(session?: AuthenticatedUserSession): Promise<any[]>;
+  listRequirements(gradeLevelId?: string, session?: AuthenticatedUserSession): Promise<any[]>;
+  saveDocument(doc: any, session?: AuthenticatedUserSession): Promise<any>;
+  getDocumentById(documentId: string, session?: AuthenticatedUserSession): Promise<any>;
+  listDocumentsForApplication(applicationId: string, session?: AuthenticatedUserSession): Promise<any[]>;
+  verifyDocument(documentId: string, status: string, reason?: string, session?: AuthenticatedUserSession): Promise<any>;
+  resetForTesting?(): void;
 }
 
 export interface IAuditRepository {
+  recordAuditEvent(input: any, session?: AuthenticatedUserSession): Promise<any>;
   logAction(entry: any, session?: AuthenticatedUserSession): Promise<void>;
   getLogs(
     filter: any,
     session?: AuthenticatedUserSession
   ): Promise<{ data: any[]; total: number }>;
+  resetForTesting?(): void;
 }

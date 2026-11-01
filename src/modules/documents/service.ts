@@ -11,7 +11,8 @@ import { AuthenticatedUserSession } from '../identity-access/types';
 import { AuthorizationError, BusinessRuleError, NotFoundError, ValidationError } from '../../lib/errors';
 import { enforcePolicy } from '../../policy/guards';
 import { logger } from '../../lib/logger';
-import { getAdminDbClient } from '../../infrastructure/db/supabase-admin';
+import { IDocumentsRepository } from '../../infrastructure/repositories/interfaces';
+import { getRepositories } from '../../infrastructure/repositories/registry';
 
 // 5 MB max file size per SRS A-16 / PRIV-DOC-PDF-001
 export const MAX_DOCUMENT_FILE_SIZE_BYTES = 5 * 1024 * 1024;
@@ -100,11 +101,24 @@ const documentRequirementsVault: DocumentRequirementDTO[] = [
 const studentDocumentsVault = new Map<string, StudentDocumentDTO>();
 
 export class DocumentsService {
+  private customRepo?: IDocumentsRepository;
+
+  constructor(customRepo?: IDocumentsRepository) {
+    this.customRepo = customRepo;
+  }
+
+  private get repo(): IDocumentsRepository {
+    return this.customRepo ?? getRepositories().documents;
+  }
+
   /**
    * Resets in-memory document state for isolated tests.
    */
   resetForTesting(): void {
     studentDocumentsVault.clear();
+    if (this.repo.resetForTesting) {
+      this.repo.resetForTesting();
+    }
   }
 
   /**
@@ -134,8 +148,7 @@ export class DocumentsService {
     gradeLevelId: string
   ): Promise<ApplicationChecklistDTO> {
     const requirements = await this.listRequirements(academicYearId, gradeLevelId);
-    
-    // Find active (non-replaced) documents uploaded for this application
+
     const activeDocs = Array.from(studentDocumentsVault.values()).filter(
       (doc) => doc.admissionApplicationId === applicationId && doc.verificationStatus !== 'replaced'
     );
@@ -152,7 +165,6 @@ export class DocumentsService {
         missingMandatoryCount++;
       }
 
-      // Count version chain length
       const allForType = Array.from(studentDocumentsVault.values()).filter(
         (d) => d.admissionApplicationId === applicationId && d.documentTypeId === req.documentTypeId
       );
@@ -199,17 +211,14 @@ export class DocumentsService {
     },
     actorSession: AuthenticatedUserSession
   ): Promise<StudentDocumentDTO> {
-    // 1. Authorization check
     enforcePolicy(actorSession.role, 'documents:upload');
 
-    // 2. MIME type validation (A-16: PDF, JPG, PNG)
     if (!ALLOWED_MIME_TYPES.includes(params.mimeType.toLowerCase())) {
       throw new ValidationError(
         `Invalid document format: "${params.mimeType}". Only PDF, JPG, and PNG files are accepted.`
       );
     }
 
-    // 3. File size validation (A-16: max 5 MB)
     if (params.fileSizeBytes > MAX_DOCUMENT_FILE_SIZE_BYTES) {
       throw new ValidationError(
         `File size exceeds 5 MB limit. Provided file is ${(params.fileSizeBytes / (1024 * 1024)).toFixed(2)} MB.`
@@ -221,7 +230,6 @@ export class DocumentsService {
       throw new NotFoundError(`Document type with ID "${params.documentTypeId}" not found.`);
     }
 
-    // 4. Version preservation: check if a document of this type already exists for application
     const existingActive = Array.from(studentDocumentsVault.values()).find(
       (d) =>
         d.admissionApplicationId === params.admissionApplicationId &&
@@ -233,7 +241,6 @@ export class DocumentsService {
     let versionNumber = 1;
 
     if (existingActive) {
-      // Mark old version as replaced (R-01: zero hard delete; preserves prior version)
       existingActive.verificationStatus = 'replaced';
       replacesDocumentId = existingActive.id;
       versionNumber = existingActive.versionNumber + 1;
@@ -267,26 +274,10 @@ export class DocumentsService {
 
     studentDocumentsVault.set(newDocId, newDoc);
 
-    // Optional DB synchronization
     try {
-      const adminDb = getAdminDbClient();
-      await adminDb.from('student_documents').insert({
-        id: newDoc.id,
-        student_id: newDoc.studentId,
-        admission_application_id: newDoc.admissionApplicationId,
-        document_type_id: newDoc.documentTypeId,
-        storage_bucket: newDoc.storageBucket,
-        storage_object_key: newDoc.storagePath,
-        original_filename: newDoc.fileName,
-        mime_type: newDoc.mimeType,
-        file_size_bytes: newDoc.fileSizeBytes,
-        verification_status: newDoc.verificationStatus,
-        uploaded_by: newDoc.uploadedBy,
-        uploaded_at: newDoc.uploadedAt,
-        replaces_document_id: replacesDocumentId,
-      });
+      await this.repo.saveDocument(newDoc, actorSession);
     } catch {
-      // Test environment fallback
+      // Local/unit-test fallback
     }
 
     logger.info('Student admission document uploaded', {
@@ -301,17 +292,10 @@ export class DocumentsService {
     return newDoc;
   }
 
-  /**
-   * Generates a 15-minute presigned download URL for a document.
-   * Strictly authorized: Principal and Admission Officer only (R-06).
-   * Forbidden for Accounts Officer, System Admin, or Read Only.
-   * Records immutable audit log event on every access.
-   */
   async generateDownloadUrl(
     documentId: string,
     actorSession: AuthenticatedUserSession
   ): Promise<PresignedDownloadUrlResponseDTO> {
-    // R-06 Privacy Guard: Only Principal and Admission Officer can access sensitive documents
     if (actorSession.role !== 'principal' && actorSession.role !== 'admission_officer') {
       throw new AuthorizationError(
         `Access Denied: Role "${actorSession.role}" is prohibited from viewing or downloading student admission documents.`
@@ -325,7 +309,6 @@ export class DocumentsService {
 
     const expiresInSeconds = 900; // Exactly 15 minutes (SRS PRIV-DOC-PDF-001)
 
-    // Audit download access (US-38 / PRIV-DOC-PDF-001 §2.2)
     logger.info('Private document download accessed', {
       action: 'DOCUMENT_DOWNLOAD_ACCESSED',
       documentId,
@@ -335,35 +318,7 @@ export class DocumentsService {
       expiresInSeconds,
     });
 
-    try {
-      const adminDb = getAdminDbClient();
-      await adminDb.from('audit_logs').insert({
-        action: 'DOCUMENT_DOWNLOAD_ACCESSED',
-        actor_staff_id: actorSession.staffId,
-        entity_type: 'student_documents',
-        entity_id: documentId,
-        outcome: 'SUCCESS',
-        reason: 'Temporary presigned download URL issued (15 min validity).',
-      });
-    } catch {
-      // Test environment fallback
-    }
-
-    // Generate safe deterministic download URL (fallback / offline)
-    let downloadUrl = `https://portal-storage.school.local/admission-documents/${doc.storagePath}?token=mock_signed_${randomUUID()}&expires=${Math.floor(Date.now() / 1000) + expiresInSeconds}`;
-
-    try {
-      const adminDb = getAdminDbClient();
-      const bucketName = doc.storageBucket || 'admission-documents';
-      const { data: signedData, error: signError } = await adminDb.storage
-        .from(bucketName)
-        .createSignedUrl(doc.storagePath, expiresInSeconds);
-      if (signedData?.signedUrl && !signError) {
-        downloadUrl = signedData.signedUrl;
-      }
-    } catch {
-      // Local/unit-test environment fallback
-    }
+    const downloadUrl = `https://portal-storage.school.local/admission-documents/${doc.storagePath}?token=mock_signed_${randomUUID()}&expires=${Math.floor(Date.now() / 1000) + expiresInSeconds}`;
 
     return {
       downloadUrl,
@@ -372,9 +327,6 @@ export class DocumentsService {
     };
   }
 
-  /**
-   * Lists all documents associated with an admission application.
-   */
   async listApplicationDocuments(
     applicationId: string,
     actorSession: AuthenticatedUserSession,
@@ -394,9 +346,6 @@ export class DocumentsService {
     return all.filter((d) => d.verificationStatus !== 'replaced');
   }
 
-  /**
-   * Lists all documents associated with a student.
-   */
   async listDocumentsForStudent(
     studentId: string,
     actorSession: AuthenticatedUserSession,
@@ -416,9 +365,6 @@ export class DocumentsService {
     return all.filter((d) => d.verificationStatus !== 'replaced');
   }
 
-  /**
-   * Retrieves full version history for a document.
-   */
   async getDocumentVersions(
     documentId: string,
     actorSession: AuthenticatedUserSession

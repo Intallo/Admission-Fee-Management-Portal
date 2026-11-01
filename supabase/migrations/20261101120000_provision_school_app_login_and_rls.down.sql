@@ -67,7 +67,9 @@ drop policy if exists certificate_versions_insert_policy on public.certificate_v
 drop policy if exists audit_logs_select_policy on public.audit_logs;
 drop policy if exists audit_logs_insert_policy on public.audit_logs;
 
--- 2. Drop helper functions
+-- 2. Drop helper and numbering functions
+drop function if exists private.next_certificate_number(text);
+drop function if exists private.next_admission_number(text);
 drop function if exists private.current_actor_staff_id();
 drop function if exists private.current_actor_role();
 
