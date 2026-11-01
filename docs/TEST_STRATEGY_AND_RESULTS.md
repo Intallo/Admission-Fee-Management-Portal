@@ -92,7 +92,8 @@ flowchart TD
 | [`tests/phase8_1_durability_and_security.test.ts`](file:///tests/phase8_1_durability_and_security.test.ts) | Durability & Security | Phase 8.1 remediation verifying rejection of in-memory Maps in production, fail-closed database connectivity, transaction atomicity, signed session integrity, and zero silent exception catching. | 15 | **PASS** |
 | [`tests/postgres_integration.test.ts`](file:///tests/postgres_integration.test.ts) | PostgreSQL Production Integration | Phase 8.2 end-to-end integration suite verifying all 16 production scenarios: Admissions atomic approval, Student Records search/PII masking/status transition, Document uploads & signed URLs, Audit log persistence, Authentication via `private.auth_*` gateways under RLS, cryptographic HMAC actor signatures, rejection of dummy sessions, and composite `(series_code, academic_year_id)` numbering with annual rollover. | 16 | **PASS** |
 | [`tests/postgres_ci_foundation.test.ts`](file:///tests/postgres_ci_foundation.test.ts) | PostgreSQL CI Foundation & Migrations | Phase 8.3.1 clean database migration suite: chronological sequence verification across all 9 migrations, stop-immediately error propagation on SQL failures (`ON_ERROR_STOP=1`), Supabase compatibility role/schema verification (`anon`, `authenticated`, `service_role`, `supabase_admin`, `authenticator`, `auth.users`, `storage.buckets`), and test bootstrap quarantine safeguards. | 14 | **PASS** |
-| **TOTAL** | **Full Portal Suite** | **30 Test Suites Covering 100% of Application Surface** | **271** | **ALL PASS** |
+| [`tests/actor_signature_security.test.ts`](file:///tests/actor_signature_security.test.ts) | HMAC Secret & Actor Identity Security | Phase 8.3.2 verification suite: fail-closed enforcement of missing/short secrets (< 32 chars), zero committed defaults, removal of caller fallback `app.actor_signing_key`, forged role/staff ID/zero-UUID rejection, inactive staff rejection, case-insensitive HMAC verification in `private.current_actor_role()`, secret rotation lifecycle, connection-pool `RESET ALL` context cleanup, and forward/down migration schema invariants. | 29 | **PASS** |
+| **TOTAL** | **Full Portal Suite** | **31 Test Suites Covering 100% of Application Surface** | **300** | **ALL PASS** |
 
 ---
 
@@ -213,3 +214,11 @@ Executed against PostgreSQL engine using `supabase/tests/`:
   3. `Manager Signature` (Principal)
 - Watermarked `*** DUPLICATE COPY (Reprint #N) ***` header on reprints.
 - Monotonic 6-digit zero-padded numbering: `RCT-YYYY-NNNNNN`.
+
+### 4.5 HMAC Secret Provisioning & Actor Identity Verification (Milestone M8.3.2)
+- Tested in `tests/actor_signature_security.test.ts` across 29 test scenarios.
+- **Fail-Closed Secret Enforcement:** Enforces cryptographic requirement of 32+ character high-entropy secret (`openssl rand -hex 32`); missing or short secrets immediately abort transaction processing.
+- **Zero Committed Defaults:** Eliminates all default HMAC secrets from application code, migrations, and CI workflows.
+- **Actor Signature Verification (`private.current_actor_role`):** Authoritative database check verifying staff UUID, active account status, asserted role match, and case-insensitive HMAC-SHA256 signature against `private.system_secrets`.
+- **Session Leak Prevention:** Guarantees `RESET ALL` executes in connection-pool `finally` block on commit or rollback.
+- **Migration & Rollback Invariants:** Validates forward migration has zero caller fallback (`app.actor_signing_key` removed) and rollback restores Migration 8's actor verification function prior to dropping `private.system_secrets`.

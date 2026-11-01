@@ -39,7 +39,7 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: sb_srv_ci_dummy_service_role_key_1234567890
       DATABASE_URL: postgresql://postgres:postgrespassword@localhost:5432/school_test_db
       ALLOW_REMOTE_DATABASE: "false"
-      ACTOR_SIGNING_SECRET: school-app-actor-signing-secret-default-key-2026
+
 
     steps:
       - name: Checkout Source Code
@@ -55,6 +55,11 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y postgresql-client
+
+      - name: Generate Ephemeral High-Entropy Actor Signing Secret
+        run: |
+          ACTOR_SECRET=$(openssl rand -hex 32)
+          echo "ACTOR_SIGNING_SECRET=$ACTOR_SECRET" >> $GITHUB_ENV
 
       - name: Bootstrap Test Database & Apply Migrations
         run: |
