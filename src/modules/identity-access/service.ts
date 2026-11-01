@@ -25,6 +25,17 @@ export async function initializeDemoCredentials(repo?: IIdentityRepository): Pro
     { email: 'accounts@school-demo.example', role: 'accountant' as StaffRole, fullName: 'Demo Accountant', mustChange: false },
   ];
 
+  const bootstrapSession: AuthenticatedUserSession = {
+    staffId: '00000000-0000-0000-0000-000000000000',
+    authUserId: '00000000-0000-0000-0000-000000000000',
+    email: 'system.admin@school-demo.example',
+    fullName: 'Demo System Administrator',
+    role: 'system_admin',
+    isActive: true,
+    activeAcademicYearId: '00000000-0000-0000-0000-000000000001',
+    activeAcademicYearLabel: '2026-2027',
+  };
+
   for (const acc of demoAccounts) {
     const existing = await repository.getStaffByEmail(acc.email);
     if (!existing) {
@@ -36,7 +47,7 @@ export async function initializeDemoCredentials(repo?: IIdentityRepository): Pro
         passwordHash: defaultHash,
         mustChangePassword: acc.mustChange,
         isActive: true,
-      });
+      }, bootstrapSession);
     }
   }
 
@@ -94,7 +105,7 @@ export class IdentityService {
 
     // 2. Lookup staff profile from repository
     const staffRecord = await this.repo.getStaffByEmail(normalizedEmail);
-    const secRecord = staffRecord ? await this.repo.getSecurityProfile(staffRecord.id) : null;
+    const secRecord = staffRecord ? await this.repo.getSecurityProfile(staffRecord.id, normalizedEmail) : null;
 
     // Check DB-persisted lockout
     if (secRecord && secRecord.lockedUntil && Date.now() < secRecord.lockedUntil) {
@@ -152,9 +163,19 @@ export class IdentityService {
       throw new AuthenticationError('Invalid email or password.');
     }
 
-    // Successful login: reset failed attempts
+    // Successful login: reset failed attempts using authenticated self-session
     recordSuccessfulLogin(normalizedEmail);
-    await this.repo.recordLoginAttempt(staffRecord.id, true);
+    const selfSession: AuthenticatedUserSession = {
+      staffId: staffRecord.id,
+      authUserId: staffRecord.authUserId || staffRecord.id,
+      email: staffRecord.email,
+      fullName: staffRecord.fullName,
+      role: staffRecord.role,
+      isActive: true,
+      activeAcademicYearId: '00000000-0000-0000-0000-000000000001',
+      activeAcademicYearLabel: '2026-2027',
+    };
+    await this.repo.recordLoginAttempt(staffRecord.id, true, null, selfSession);
 
     // 4. Resolve active academic year
     const activeYearId = '00000000-0000-0000-0000-000000000001';
@@ -216,7 +237,7 @@ export class IdentityService {
     if (!staff) {
       throw new NotFoundError('Security profile not found for staff user.');
     }
-    const secRecord = await this.repo.getSecurityProfile(staff.id);
+    const secRecord = await this.repo.getSecurityProfile(staff.id, staff.email);
     if (!secRecord) {
       throw new NotFoundError('Security profile not found for staff user.');
     }
@@ -233,9 +254,21 @@ export class IdentityService {
       throw new AuthenticationError('Current password is incorrect.');
     }
 
+    // Authenticated self-session for authorized password change
+    const selfSession: AuthenticatedUserSession = {
+      staffId: staff.id,
+      authUserId: staff.authUserId || staff.id,
+      email: staff.email,
+      fullName: staff.fullName,
+      role: staff.role,
+      isActive: staff.isActive,
+      activeAcademicYearId: '00000000-0000-0000-0000-000000000001',
+      activeAcademicYearLabel: '2026-2027',
+    };
+
     // Hash and persist new password
     const newHash = await hashPassword(newPassword);
-    await this.repo.updatePassword(staff.id, newHash, false);
+    await this.repo.updatePassword(staff.id, newHash, false, selfSession);
 
     logger.info('Staff password changed successfully', { staffId, email: actorEmail });
 
@@ -263,7 +296,7 @@ export class IdentityService {
     const temporaryPassword = `Temp@${randomUUID().substring(0, 8)}!`;
     const newHash = await hashPassword(temporaryPassword);
 
-    await this.repo.updatePassword(staff.id, newHash, true);
+    await this.repo.updatePassword(staff.id, newHash, true, actorSession);
     resetLockout(normalized);
 
     logger.info('Staff password reset triggered by admin', {

@@ -45,13 +45,17 @@ export class PostgresIdentityRepository implements IIdentityRepository {
     });
   }
 
-  async getSecurityProfile(staffId: string): Promise<any | null> {
-    return withSystemTransaction(async (client) => {
+  async getSecurityProfile(
+    staffId: string,
+    email?: string,
+    session?: AuthenticatedUserSession
+  ): Promise<any | null> {
+    const executeQuery = async (client: any) => {
       const res = await client.query(
         `select staff_id, password_hash, must_change_password, failed_login_attempts,
                 locked_until, last_login_at
-         from private.auth_get_security_profile($1)`,
-        [staffId]
+         from private.auth_get_security_profile($1, $2)`,
+        [staffId, email ? email.trim().toLowerCase() : null]
       );
       if (res.rowCount === 0) return null;
       const r = res.rows[0];
@@ -63,21 +67,44 @@ export class PostgresIdentityRepository implements IIdentityRepository {
         lockedUntil: r.locked_until ? new Date(r.locked_until).getTime() : null,
         lastLoginAt: r.last_login_at,
       };
-    });
+    };
+
+    if (session && session.staffId) {
+      return withTransaction(session, executeQuery);
+    }
+    return withSystemTransaction(executeQuery);
   }
 
-  async recordLoginAttempt(staffId: string, success: boolean, lockedUntil?: number | null): Promise<void> {
-    return withSystemTransaction(async (client) => {
-      const lockedUntilIso = lockedUntil ? new Date(lockedUntil).toISOString() : null;
+  async recordLoginAttempt(
+    staffId: string,
+    success: boolean,
+    lockedUntil?: number | null,
+    session?: AuthenticatedUserSession
+  ): Promise<void> {
+    const lockedUntilIso = lockedUntil ? new Date(lockedUntil).toISOString() : null;
+    const executeQuery = async (client: any) => {
       await client.query(
         `select private.auth_record_login_attempt($1, $2, $3)`,
         [staffId, success, lockedUntilIso]
       );
-    });
+    };
+
+    if (session && session.staffId) {
+      return withTransaction(session, executeQuery);
+    }
+    return withSystemTransaction(executeQuery);
   }
 
-  async updatePassword(staffId: string, passwordHash: string, mustChangePassword: boolean): Promise<void> {
-    return withSystemTransaction(async (client) => {
+  async updatePassword(
+    staffId: string,
+    passwordHash: string,
+    mustChangePassword: boolean,
+    session?: AuthenticatedUserSession
+  ): Promise<void> {
+    if (!session || !session.staffId) {
+      throw new AuthorizationError('Authentication session required to update passwords.');
+    }
+    return withTransaction(session, async (client) => {
       await client.query(
         `select private.auth_update_password($1, $2, $3)`,
         [staffId, passwordHash, mustChangePassword]
@@ -123,9 +150,8 @@ export class PostgresIdentityRepository implements IIdentityRepository {
 
       if (data.passwordHash) {
         await client.query(
-          `insert into public.staff_security_profiles (staff_id, password_hash, must_change_password, created_at, updated_at)
-           values ($1, $2, $3, $4, $4)`,
-          [id, data.passwordHash, data.mustChangePassword ?? true, nowIso]
+          `select private.auth_create_security_profile($1, $2, $3)`,
+          [id, data.passwordHash, data.mustChangePassword ?? true]
         );
       }
 

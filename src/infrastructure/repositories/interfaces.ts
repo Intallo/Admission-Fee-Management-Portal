@@ -3,9 +3,9 @@ import { AuthenticatedUserSession } from '../../modules/identity-access/types';
 export interface IIdentityRepository {
   getStaffByEmail(email: string): Promise<any | null>;
   getStaffById(staffId: string): Promise<any | null>;
-  getSecurityProfile(staffId: string): Promise<any | null>;
-  recordLoginAttempt(staffId: string, success: boolean, lockedUntil?: number | null): Promise<void>;
-  updatePassword(staffId: string, passwordHash: string, mustChangePassword: boolean): Promise<void>;
+  getSecurityProfile(staffId: string, email?: string, session?: AuthenticatedUserSession): Promise<any | null>;
+  recordLoginAttempt(staffId: string, success: boolean, lockedUntil?: number | null, session?: AuthenticatedUserSession): Promise<void>;
+  updatePassword(staffId: string, passwordHash: string, mustChangePassword: boolean, session?: AuthenticatedUserSession): Promise<void>;
   listStaff(session?: AuthenticatedUserSession): Promise<any[]>;
   createStaff(data: any, session?: AuthenticatedUserSession): Promise<any>;
   updateStaff(staffId: string, data: any, session?: AuthenticatedUserSession): Promise<any>;
