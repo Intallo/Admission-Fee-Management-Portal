@@ -28,7 +28,9 @@ export class InMemoryAdmissionsRepository implements IAdmissionsRepository {
     this.feeAssessmentsVault.clear();
     this.statusHistoryVault.clear();
     this.appSeq = 1;
-    this.admSeq = 1; (this as any)._appSeqsByYear?.clear(); (this as any)._admSeqsByYear?.clear();
+    this.admSeq = 1;
+    (this as any)._appSeqsByYear?.clear();
+    (this as any)._admSeqsByYear?.clear();
   }
 
   async getNextApplicationNumber(academicYearId: string, yearLabel: string, _session?: AuthenticatedUserSession): Promise<string> {
@@ -108,17 +110,27 @@ export class InMemoryAdmissionsRepository implements IAdmissionsRepository {
     return app;
   }
 
-  async submitApplication(applicationId: string, session?: AuthenticatedUserSession): Promise<any> {
+  async submitApplication(
+    applicationId: string,
+    payloadOrSession?: any,
+    session?: AuthenticatedUserSession,
+    _client?: any
+  ): Promise<any> {
+    const actualSession = payloadOrSession && payloadOrSession.staffId ? payloadOrSession : session;
+    const overrideReason = payloadOrSession && !payloadOrSession.staffId ? payloadOrSession.overrideMissingDocumentsReason : undefined;
     const app = this.applicationsVault.get(applicationId);
     if (!app) throw new NotFoundError(`Application "${applicationId}" not found.`);
     app.status = 'submitted';
+    if (overrideReason) {
+      app.overrideMissingDocumentsReason = overrideReason;
+    }
     app.statusHistory.push({
       id: randomUUID(),
       fromStatus: 'draft',
       toStatus: 'submitted',
-      changedBy: session ? session.staffId : 'system',
-      changedByName: session ? session.fullName : 'System',
-      reason: 'Application submitted.',
+      changedBy: actualSession ? actualSession.staffId : 'system',
+      changedByName: actualSession ? actualSession.fullName : 'System',
+      reason: overrideReason ? `Submitted with document override: ${overrideReason}` : 'Application submitted.',
       changedAt: new Date().toISOString(),
     });
     return app;
@@ -127,7 +139,12 @@ export class InMemoryAdmissionsRepository implements IAdmissionsRepository {
   async reviewApplication(applicationId: string, payload: any, session?: AuthenticatedUserSession): Promise<any> {
     const app = this.applicationsVault.get(applicationId);
     if (!app) throw new NotFoundError(`Application "${applicationId}" not found.`);
-    const toStatus = payload.action === 'approve_review' ? 'under_review' : 'on_hold';
+    let toStatus = 'under_review';
+    if (payload.action === 'hold' || payload.action === 'on_hold') {
+      toStatus = 'on_hold';
+    } else if (payload.action === 'return_to_draft') {
+      toStatus = 'draft';
+    }
     app.status = toStatus;
     app.statusHistory.push({
       id: randomUUID(),
@@ -167,18 +184,29 @@ export class InMemoryAdmissionsRepository implements IAdmissionsRepository {
 
   async listApplications(_filter: any, _session?: AuthenticatedUserSession): Promise<any> {
     const all = Array.from(this.applicationsVault.values());
+    const counts = {
+      total: all.length,
+      draft: all.filter((a) => a.status === 'draft').length,
+      submitted: all.filter((a) => a.status === 'submitted').length,
+      under_review: all.filter((a) => a.status === 'under_review').length,
+      on_hold: all.filter((a) => a.status === 'on_hold').length,
+      approved: all.filter((a) => a.status === 'approved').length,
+      rejected: all.filter((a) => a.status === 'rejected').length,
+      draftCount: all.filter((a) => a.status === 'draft').length,
+      submittedCount: all.filter((a) => a.status === 'submitted').length,
+      underReviewCount: all.filter((a) => a.status === 'under_review').length,
+      onHoldCount: all.filter((a) => a.status === 'on_hold').length,
+      approvedCount: all.filter((a) => a.status === 'approved').length,
+      rejectedCount: all.filter((a) => a.status === 'rejected').length,
+      totalCount: all.length,
+    };
     return {
+      items: all,
+      counts,
       data: all,
       total: all.length,
       limit: 50,
       offset: 0,
-      counts: {
-        total: all.length,
-        draft: all.filter((a) => a.status === 'draft').length,
-        submitted: all.filter((a) => a.status === 'submitted').length,
-        under_review: all.filter((a) => a.status === 'under_review').length,
-        approved: all.filter((a) => a.status === 'approved').length,
-      },
     };
   }
 
@@ -194,6 +222,8 @@ export class InMemoryAdmissionsRepository implements IAdmissionsRepository {
       academicYearId,
       enrolledInSection: enrolled,
       sectionMaxCapacity: 40,
+      availableInSection: Math.max(0, 40 - enrolled),
+      availableInGroup: Math.max(0, 100 - enrolled),
       isSectionAvailable: enrolled < 40,
       divisionGroup: 'primary',
       enrolledInDivisionGroup: enrolled,
@@ -313,7 +343,7 @@ export class InMemoryAdmissionsRepository implements IAdmissionsRepository {
     this.studentsVault.set(student.id, student);
   }
 
-  async getFeeAssessmentByRecordId(studentAcademicRecordId: string): Promise<any> {
+  async getFeeAssessmentByRecordId(studentAcademicRecordId: string, _session?: AuthenticatedUserSession): Promise<any> {
     for (const a of this.feeAssessmentsVault.values()) {
       if (a.studentAcademicRecordId === studentAcademicRecordId) return a;
     }
@@ -322,5 +352,9 @@ export class InMemoryAdmissionsRepository implements IAdmissionsRepository {
 
   async saveFeeAssessment(assessment: any): Promise<void> {
     this.feeAssessmentsVault.set(assessment.id, assessment);
+  }
+
+  async getAllApplications(_session?: AuthenticatedUserSession): Promise<any[]> {
+    return Array.from(this.applicationsVault.values());
   }
 }

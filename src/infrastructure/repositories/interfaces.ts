@@ -29,7 +29,7 @@ export interface IAdmissionsRepository {
   getNextAdmissionNumber(academicYearId: string, yearLabel: string, session?: AuthenticatedUserSession, client?: any): Promise<string>;
   createDraft(payload: any, session?: AuthenticatedUserSession, client?: any): Promise<any>;
   updateDraft(applicationId: string, payload: any, session?: AuthenticatedUserSession, client?: any): Promise<any>;
-  submitApplication(applicationId: string, session?: AuthenticatedUserSession, client?: any): Promise<any>;
+  submitApplication(applicationId: string, payloadOrSession?: any, session?: AuthenticatedUserSession, client?: any): Promise<any>;
   reviewApplication(
     applicationId: string,
     payload: any,
@@ -54,7 +54,8 @@ export interface IAdmissionsRepository {
   saveAcademicRecord?(record: any): Promise<void>;
   saveStudent?(student: any): Promise<void>;
   saveFeeAssessment?(assessment: any): Promise<void>;
-  getFeeAssessmentByRecordId?(studentAcademicRecordId: string): Promise<any>;
+  getFeeAssessmentByRecordId?(studentAcademicRecordId: string, session?: AuthenticatedUserSession, client?: any): Promise<any>;
+  getAllApplications?(session?: AuthenticatedUserSession, client?: any): Promise<any[]>;
   resetForTesting?(): void;
 }
 

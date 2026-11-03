@@ -17,7 +17,7 @@ export async function GET(request: Request) {
     const session = await requireRole(['accountant', 'principal', 'read_only']);
     const academicYearId = searchParams.get('academicYearId') || session.activeAcademicYearId;
 
-    const allRecords = admissionsService.getAllAcademicRecords().filter(
+    const allRecords = (await admissionsService.getAllAcademicRecordsAsync(session)).filter(
       (r) => !academicYearId || r.academicYearId === academicYearId
     );
 

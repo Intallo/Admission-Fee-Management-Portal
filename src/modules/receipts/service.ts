@@ -128,7 +128,7 @@ export class ReceiptsService {
       studentAcademicRecordId,
       actorSession
     );
-    const academicRecord = await admissionsService.getAcademicRecord(studentAcademicRecordId);
+    const academicRecord = await admissionsService.getAcademicRecordAsync(studentAcademicRecordId, actorSession);
     if (!academicRecord) {
       throw new NotFoundError(
         `Student academic record with ID "${studentAcademicRecordId}" not found.`

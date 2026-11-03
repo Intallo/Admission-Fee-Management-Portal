@@ -250,7 +250,18 @@ export class AdmissionsService {
     if (process.env.PERSISTENCE_MODE === 'postgres' || process.env.NODE_ENV === 'production') {
       return true;
     }
-    return this.repo instanceof PostgresAdmissionsRepository;
+    if (this.customRepo) {
+      return this.customRepo instanceof PostgresAdmissionsRepository;
+    }
+    try {
+      if (typeof getRepositories === 'function') {
+        const reg = getRepositories();
+        return reg?.admissions instanceof PostgresAdmissionsRepository;
+      }
+    } catch {
+      return false;
+    }
+    return false;
   }
   /**
    * Resets in-memory state for clean test isolation.
@@ -329,6 +340,10 @@ export class AdmissionsService {
    * Checks section and division-group capacity.
    */
   async checkCapacity(sectionId: string, academicYearId: string): Promise<SectionCapacityDTO> {
+    if (this.isPostgres()) {
+      return await this.repo.checkCapacity(sectionId, academicYearId);
+    }
+
     const section = sectionsVault.find((s) => s.id === sectionId && s.academicYearId === academicYearId);
     if (!section) {
       throw new NotFoundError(`Section with ID "${sectionId}" not found in academic year.`);
@@ -503,34 +518,6 @@ export class AdmissionsService {
 
     applicationsVault.set(applicationId, record);
 
-    // Optional DB synchronization
-    try {
-      await this.repo.createDraft({
-        ...payload,
-        id: applicationId,
-        studentId,
-        applicationNumber,
-        student: { ...payload.student, id: studentId },
-      }, actorSession).catch(() => {});
-      if ((this.repo as any).saveStudent) {
-        await (this.repo as any).saveStudent({ id: studentId, ...payload.student });
-      }
-      const adminDb = null as any;
-      if (adminDb)
-      await adminDb.from('admission_applications').insert({
-        id: record.id,
-        application_number: record.applicationNumber,
-        academic_year_id: record.academicYearId,
-        requested_grade_level_id: record.requestedGradeLevelId,
-        requested_section_id: record.requestedSectionId,
-        status: 'draft',
-        student_id: record.studentId,
-        created_by: actorSession.staffId,
-      });
-    } catch {
-      // Test environment fallback
-    }
-
     logger.info('New admission application draft created', {
       applicationId,
       applicationNumber,
@@ -660,7 +647,7 @@ export class AdmissionsService {
   ): Promise<AdmissionApplicationDetailDTO> {
     enforcePolicy(actorSession.role, 'admissions:submit_verification');
     if (this.isPostgres()) {
-      return await this.repo.submitApplication(applicationId, actorSession);
+      return await this.repo.submitApplication(applicationId, payload, actorSession);
     }
     return this._inMemorySubmitApplication(applicationId, payload, actorSession);
   }
@@ -1449,6 +1436,10 @@ export class AdmissionsService {
    * Helper to seed standard synthetic applications for testing.
    */
   seedDemoApplications(): void {
+    if (this.isPostgres()) {
+      return;
+    }
+
     const academicYearId = '00000000-0000-0000-0000-000000000001';
     const std1Id = '30000000-0000-0000-0000-000000000004';
     const sectionAId = '40000000-0000-0000-0000-000000000001';
@@ -1562,61 +1553,175 @@ export class AdmissionsService {
     return this.getApplicationByRecordId(academicRecordId);
   }
 
+  async getFeeAssessmentByRecordIdAsync(studentAcademicRecordId: string, session?: AuthenticatedUserSession): Promise<InternalFeeAssessment | undefined> {
+    if (this.isPostgres()) {
+      return await (this.repo as any).getFeeAssessmentByRecordId?.(studentAcademicRecordId, session);
+    }
+    return this.getFeeAssessmentByRecordId(studentAcademicRecordId);
+  }
+
+  async getAllApplicationsAsync(session?: AuthenticatedUserSession): Promise<InternalApplicationRecord[]> {
+    if (this.isPostgres()) {
+      return await (this.repo as any).getAllApplications?.(session) || [];
+    }
+    return this.getAllApplications();
+  }
+
+  async getGradeLevelAsync(id: string, session?: AuthenticatedUserSession): Promise<GradeLevelEntity | undefined> {
+    if (this.isPostgres()) {
+      const list = await academicYearsService.listGradeLevels(session);
+      const found = list.find((g: any) => g.id === id);
+      if (!found) return undefined;
+      return {
+        id: found.id,
+        code: found.code,
+        name: found.name,
+        groupName: found.group_name || found.groupName || 'primary',
+        sortOrder: found.sort_order || found.sortOrder || 1,
+      };
+    }
+    return this.getGradeLevel(id);
+  }
+
+  async getAllGradeLevelsAsync(session?: AuthenticatedUserSession): Promise<GradeLevelEntity[]> {
+    if (this.isPostgres()) {
+      const list = await academicYearsService.listGradeLevels(session);
+      return list.map((found: any) => ({
+        id: found.id,
+        code: found.code,
+        name: found.name,
+        groupName: found.group_name || found.groupName || 'primary',
+        sortOrder: found.sort_order || found.sortOrder || 1,
+      }));
+    }
+    return this.getAllGradeLevels();
+  }
+
+  async getSectionAsync(id: string, session?: AuthenticatedUserSession): Promise<SectionEntity | undefined> {
+    if (this.isPostgres()) {
+      const found = await academicYearsService.getSectionById(id, session);
+      if (!found) return undefined;
+      return {
+        id: found.id,
+        academicYearId: found.academic_year_id || found.academicYearId,
+        gradeLevelId: found.grade_level_id || found.gradeLevelId,
+        name: found.name,
+        maxCapacity: found.max_capacity || found.maxCapacity || 40,
+        isActive: found.is_active ?? found.isActive ?? true,
+      };
+    }
+    return this.getSection(id);
+  }
+
+  async getAllSectionsAsync(academicYearId?: string, session?: AuthenticatedUserSession): Promise<SectionEntity[]> {
+    if (this.isPostgres()) {
+      const list = await academicYearsService.listSections(academicYearId, session);
+      return list.map((found: any) => ({
+        id: found.id,
+        academicYearId: found.academic_year_id || found.academicYearId,
+        gradeLevelId: found.grade_level_id || found.gradeLevelId,
+        name: found.name,
+        maxCapacity: found.max_capacity || found.maxCapacity || 40,
+        isActive: found.is_active ?? found.isActive ?? true,
+      }));
+    }
+    return this.getAllSections();
+  }
+
   getAcademicRecord(id: string): InternalAcademicRecord | undefined {
+    if (this.isPostgres()) {
+      throw new BusinessRuleError('Synchronous getAcademicRecord is not supported in production PostgreSQL mode. Use getAcademicRecordAsync() instead.');
+    }
     return academicRecordsVault.get(id);
   }
 
   getAllAcademicRecords(): InternalAcademicRecord[] {
+    if (this.isPostgres()) {
+      throw new BusinessRuleError('Synchronous getAllAcademicRecords is not supported in production PostgreSQL mode. Use getAllAcademicRecordsAsync() instead.');
+    }
     return Array.from(academicRecordsVault.values());
   }
 
   getFeeAssessment(id: string): InternalFeeAssessment | undefined {
+    if (this.isPostgres()) {
+      throw new BusinessRuleError('Synchronous getFeeAssessment is not supported in production PostgreSQL mode.');
+    }
     return feeAssessmentsVault.get(id);
   }
 
   getFeeAssessmentByRecordId(studentAcademicRecordId: string): InternalFeeAssessment | undefined {
+    if (this.isPostgres()) {
+      throw new BusinessRuleError('Synchronous getFeeAssessmentByRecordId is not supported in production PostgreSQL mode. Use getFeeAssessmentByRecordIdAsync() instead.');
+    }
     return Array.from(feeAssessmentsVault.values()).find(
       (a) => a.studentAcademicRecordId === studentAcademicRecordId
     );
   }
 
   getAllFeeAssessments(): InternalFeeAssessment[] {
+    if (this.isPostgres()) {
+      throw new BusinessRuleError('Synchronous getAllFeeAssessments is not supported in production PostgreSQL mode.');
+    }
     return Array.from(feeAssessmentsVault.values());
   }
 
   saveFeeAssessment(assessment: InternalFeeAssessment): void {
+    if (this.isPostgres()) {
+      throw new BusinessRuleError('Synchronous saveFeeAssessment is not supported in production PostgreSQL mode.');
+    }
     feeAssessmentsVault.set(assessment.id, assessment);
     (this.repo as any).saveFeeAssessment?.(assessment);
   }
 
   getGradeLevel(id: string): GradeLevelEntity | undefined {
+    if (this.isPostgres()) {
+      throw new BusinessRuleError('Synchronous getGradeLevel is not supported in production PostgreSQL mode. Use getGradeLevelAsync() instead.');
+    }
     return gradeLevelsVault.find((g) => g.id === id);
   }
 
   getSection(id: string): SectionEntity | undefined {
+    if (this.isPostgres()) {
+      throw new BusinessRuleError('Synchronous getSection is not supported in production PostgreSQL mode. Use getSectionAsync() instead.');
+    }
     return sectionsVault.find((s) => s.id === id);
   }
 
   getStudentById(id: string): StudentDemographicsDTO | undefined {
+    if (this.isPostgres()) {
+      throw new BusinessRuleError('Synchronous getStudentById is not supported in production PostgreSQL mode. Use getStudentByIdAsync() instead.');
+    }
     const app = Array.from(applicationsVault.values()).find((a) => a.studentId === id);
     return app?.student;
   }
 
   getApplicationByRecordId(academicRecordId: string): InternalApplicationRecord | undefined {
+    if (this.isPostgres()) {
+      throw new BusinessRuleError('Synchronous getApplicationByRecordId is not supported in production PostgreSQL mode. Use getApplicationByRecordIdAsync() instead.');
+    }
     const record = academicRecordsVault.get(academicRecordId);
     if (!record) return undefined;
     return Array.from(applicationsVault.values()).find((a) => a.studentId === record.studentId);
   }
 
   getAllApplications(): InternalApplicationRecord[] {
+    if (this.isPostgres()) {
+      throw new BusinessRuleError('Synchronous getAllApplications is not supported in production PostgreSQL mode. Use getAllApplicationsAsync() instead.');
+    }
     return Array.from(applicationsVault.values());
   }
 
   getAllSections(): SectionEntity[] {
+    if (this.isPostgres()) {
+      throw new BusinessRuleError('Synchronous getAllSections is not supported in production PostgreSQL mode. Use getAllSectionsAsync() instead.');
+    }
     return [...sectionsVault];
   }
 
   getAllGradeLevels(): GradeLevelEntity[] {
+    if (this.isPostgres()) {
+      throw new BusinessRuleError('Synchronous getAllGradeLevels is not supported in production PostgreSQL mode. Use getAllGradeLevelsAsync() instead.');
+    }
     return [...gradeLevelsVault];
   }
 }
