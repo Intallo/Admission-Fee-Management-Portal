@@ -659,9 +659,213 @@ describe('Milestone M8.3.3: Authentication Gateway Security', () => {
   });
 
   // ============================================================================
-  // Suite 6: Static Analysis & Migration Security Invariants
+  // Suite 6: Direct SQL Execution as Restricted Application Role (school_app_login)
   // ============================================================================
-  describe('6. Static Analysis & Migration Security Invariants', () => {
+  describe('6. Direct SQL Execution as Restricted Application Role (school_app_login)', () => {
+    const newStrongHash = 'direct_sql_new_strong_password_hash_minimum_32_chars';
+    const adminResetHash = 'direct_sql_admin_reset_temporary_password_hash_salt';
+
+    it('Test 1: Unauthorized credential access - blocks direct table read with 42501', async () => {
+      await expect(
+        withSystemTransaction(async (client) => {
+          await client.query('select * from public.staff_security_profiles');
+        })
+      ).rejects.toMatchObject({
+        code: '42501',
+        message: expect.stringContaining('permission denied for table staff_security_profiles'),
+      });
+    });
+
+    it('Test 1: Unauthorized credential access - returns 0 rows when unauthenticated direct SQL omits matching email', async () => {
+      await withSystemTransaction(async (client) => {
+        const res = await client.query('select * from private.auth_get_security_profile($1)', [principalId]);
+        expect(res.rows).toEqual([]);
+        expect(res.rowCount).toBe(0);
+      });
+    });
+
+    it('Test 1: Unauthorized credential access - returns 0 rows when unauthenticated direct SQL supplies incorrect email', async () => {
+      await withSystemTransaction(async (client) => {
+        const res = await client.query('select * from private.auth_get_security_profile($1, $2)', [
+          principalId,
+          'wrong@email.example',
+        ]);
+        expect(res.rows).toEqual([]);
+        expect(res.rowCount).toBe(0);
+      });
+    });
+
+    it('Test 1: Unauthorized credential access - returns 0 rows when non-admin direct SQL inspects other staff', async () => {
+      await withTransaction(clerkSession, async (client) => {
+        const res = await client.query('select * from private.auth_get_security_profile($1)', [principalId]);
+        expect(res.rows).toEqual([]);
+        expect(res.rowCount).toBe(0);
+      });
+    });
+
+    it('Test 2: Unauthorized password modification - rejects unauthenticated direct SQL call with 42501', async () => {
+      await expect(
+        withSystemTransaction(async (client) => {
+          await client.query('select private.auth_update_password($1, $2, $3)', [
+            principalId,
+            newStrongHash,
+            false,
+          ]);
+        })
+      ).rejects.toMatchObject({
+        code: '42501',
+        message: expect.stringContaining('Unauthorized: password modification requires authenticated actor context'),
+      });
+    });
+
+    it('Test 2: Unauthorized password modification - rejects cross-user password update via direct SQL with 42501', async () => {
+      await expect(
+        withTransaction(clerkSession, async (client) => {
+          await client.query('select private.auth_update_password($1, $2, $3)', [
+            principalId,
+            newStrongHash,
+            false,
+          ]);
+        })
+      ).rejects.toMatchObject({
+        code: '42501',
+        message: expect.stringContaining('Unauthorized: staff members may only change their own password'),
+      });
+    });
+
+    it('Test 3: Unauthorized lockout manipulation - rejects unauthenticated reset via direct SQL with 42501', async () => {
+      await expect(
+        withSystemTransaction(async (client) => {
+          await client.query('select private.auth_record_login_attempt($1, $2)', [clerkId, true]);
+        })
+      ).rejects.toMatchObject({
+        code: '42501',
+        message: expect.stringContaining(
+          'Unauthorized lockout manipulation: resetting failed login attempts requires self-session or system_admin role'
+        ),
+      });
+    });
+
+    it('Test 3: Unauthorized lockout manipulation - rejects cross-account reset via direct SQL with 42501', async () => {
+      await expect(
+        withTransaction(accountantSession, async (client) => {
+          await client.query('select private.auth_record_login_attempt($1, $2)', [clerkId, true]);
+        })
+      ).rejects.toMatchObject({
+        code: '42501',
+        message: expect.stringContaining(
+          'Unauthorized lockout manipulation: resetting failed login attempts requires self-session or system_admin role'
+        ),
+      });
+    });
+
+    it('Test 4: Valid login - completes unauthenticated metadata and credential lookup followed by authorized reset', async () => {
+      // Step A: Look up staff metadata by email (no password returned)
+      await withSystemTransaction(async (client) => {
+        const lookupRes = await client.query(
+          'select id, email, role, is_active from private.auth_lookup_staff_by_email($1)',
+          ['principal@school.example']
+        );
+        expect(lookupRes.rowCount).toBe(1);
+        expect(lookupRes.rows[0].id).toBe(principalId);
+        expect(lookupRes.rows[0].role).toBe('principal');
+        expect(lookupRes.rows[0].is_active).toBe(true);
+        expect(lookupRes.rows[0].password_hash).toBeUndefined();
+      });
+
+      // Step B: Retrieve credential profile with matching email
+      await withSystemTransaction(async (client) => {
+        const profRes = await client.query('select * from private.auth_get_security_profile($1, $2)', [
+          principalId,
+          'principal@school.example',
+        ]);
+        expect(profRes.rowCount).toBe(1);
+        expect(profRes.rows[0].password_hash).toBe('hashed_principal_password_min_32_chars_long_salt_123');
+        expect(profRes.rows[0].failed_login_attempts).toBe(0);
+      });
+
+      // Step C: Reset failed attempts upon successful authentication using self-session
+      await withTransaction(principalSession, async (client) => {
+        await client.query('select private.auth_record_login_attempt($1, $2)', [principalId, true]);
+      });
+    });
+
+    it('Test 5: Failed login - increments failed login counter via direct SQL without locking', async () => {
+      await withSystemTransaction(async (client) => {
+        await client.query('select private.auth_record_login_attempt($1, $2)', [accountantId, false]);
+        const profRes = await client.query(
+          'select failed_login_attempts, locked_until from private.auth_get_security_profile($1, $2)',
+          [accountantId, 'accounts@school.example']
+        );
+        expect(profRes.rows[0].failed_login_attempts).toBe(1);
+        expect(profRes.rows[0].locked_until).toBeNull();
+      });
+    });
+
+    it('Test 6: Fifth failed attempt and lockout - deterministically sets 15-minute lockout on fifth failure', async () => {
+      // Execute 5 consecutive failures for accountant to trigger lockout threshold
+      await withSystemTransaction(async (client) => {
+        for (let i = 0; i < 5; i++) {
+          await client.query('select private.auth_record_login_attempt($1, $2)', [accountantId, false]);
+        }
+
+        const profRes = await client.query(
+          'select failed_login_attempts, locked_until from private.auth_get_security_profile($1, $2)',
+          [accountantId, 'accounts@school.example']
+        );
+        expect(profRes.rows[0].failed_login_attempts).toBe(5);
+        expect(profRes.rows[0].locked_until).not.toBeNull();
+        const lockTime = new Date(profRes.rows[0].locked_until).getTime();
+        expect(lockTime).toBeGreaterThan(Date.now() + 14 * 60 * 1000);
+        expect(lockTime).toBeLessThanOrEqual(Date.now() + 16 * 60 * 1000);
+      });
+    });
+
+    it('Test 7: Password change with valid authorization - self-service update succeeds and resets lockout', async () => {
+      // Self-service password change by accountant
+      await withTransaction(accountantSession, async (client) => {
+        await client.query('select private.auth_update_password($1, $2, $3)', [
+          accountantId,
+          newStrongHash,
+          false,
+        ]);
+
+        const profRes = await client.query(
+          'select password_hash, must_change_password, failed_login_attempts, locked_until from private.auth_get_security_profile($1)',
+          [accountantId]
+        );
+        expect(profRes.rows[0].password_hash).toBe(newStrongHash);
+        expect(profRes.rows[0].must_change_password).toBe(false);
+        expect(profRes.rows[0].failed_login_attempts).toBe(0);
+        expect(profRes.rows[0].locked_until).toBeNull();
+      });
+    });
+
+    it('Test 7: Password change with valid authorization - administrative reset by system_admin succeeds', async () => {
+      // Administrative reset of clerk password by system_admin
+      await withTransaction(sysAdminSession, async (client) => {
+        await client.query('select private.auth_update_password($1, $2, $3)', [
+          clerkId,
+          adminResetHash,
+          true,
+        ]);
+
+        const profRes = await client.query(
+          'select password_hash, must_change_password, failed_login_attempts, locked_until from private.auth_get_security_profile($1)',
+          [clerkId]
+        );
+        expect(profRes.rows[0].password_hash).toBe(adminResetHash);
+        expect(profRes.rows[0].must_change_password).toBe(true);
+        expect(profRes.rows[0].failed_login_attempts).toBe(0);
+        expect(profRes.rows[0].locked_until).toBeNull();
+      });
+    });
+  });
+
+  // ============================================================================
+  // Suite 7: Static Analysis & Migration Security Invariants
+  // ============================================================================
+  describe('7. Static Analysis & Migration Security Invariants', () => {
     it('verifies migration 9 explicitly revokes table permissions on staff_security_profiles from application roles', () => {
       const sql = fs.readFileSync(migration9Path, 'utf-8');
       expect(sql).toContain(
@@ -710,9 +914,9 @@ describe('Milestone M8.3.3: Authentication Gateway Security', () => {
   });
 
   // ============================================================================
-  // Suite 7: Architecture Decision Record ADR-002 Compliance
+  // Suite 8: Architecture Decision Record ADR-002 Compliance
   // ============================================================================
-  describe('7. Architecture Decision Record ADR-002 Compliance', () => {
+  describe('8. Architecture Decision Record ADR-002 Compliance', () => {
     it('verifies that ADR-002 exists and follows MADR architectural structure', () => {
       expect(fs.existsSync(adr002Path)).toBe(true);
       const adrContent = fs.readFileSync(adr002Path, 'utf-8');
