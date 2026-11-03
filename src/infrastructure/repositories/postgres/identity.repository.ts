@@ -1,11 +1,15 @@
 import { IIdentityRepository } from '../interfaces';
 import { withSystemTransaction, withTransaction } from '../../db/postgres-pool';
+import { PoolClient } from 'pg';
 import { AuthenticatedUserSession, StaffRole } from '../../../modules/identity-access/types';
 import { AuthorizationError, NotFoundError } from '../../../lib/errors';
 import { randomUUID } from 'crypto';
 
 export class PostgresIdentityRepository implements IIdentityRepository {
-  async getStaffByEmail(email: string): Promise<any | null> {
+  async getStaffByEmail(
+    email: string,
+    existingClient?: PoolClient
+  ): Promise<any | null> {
     return withSystemTransaction(async (client) => {
       const res = await client.query(
         `select id, email, role, full_name, is_active, active_academic_year_id
@@ -22,10 +26,13 @@ export class PostgresIdentityRepository implements IIdentityRepository {
         isActive: r.is_active,
         activeAcademicYearId: r.active_academic_year_id,
       };
-    });
+    }, existingClient);
   }
 
-  async getStaffById(staffId: string): Promise<any | null> {
+  async getStaffById(
+    staffId: string,
+    existingClient?: PoolClient
+  ): Promise<any | null> {
     return withSystemTransaction(async (client) => {
       const res = await client.query(
         `select id, email, role, full_name, is_active, active_academic_year_id
@@ -42,13 +49,14 @@ export class PostgresIdentityRepository implements IIdentityRepository {
         isActive: r.is_active,
         activeAcademicYearId: r.active_academic_year_id,
       };
-    });
+    }, existingClient);
   }
 
   async getSecurityProfile(
     staffId: string,
     email?: string,
-    session?: AuthenticatedUserSession
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<any | null> {
     const executeQuery = async (client: any) => {
       const res = await client.query(
@@ -70,16 +78,17 @@ export class PostgresIdentityRepository implements IIdentityRepository {
     };
 
     if (session && session.staffId) {
-      return withTransaction(session, executeQuery);
+      return withTransaction(session, executeQuery, existingClient);
     }
-    return withSystemTransaction(executeQuery);
+    return withSystemTransaction(executeQuery, existingClient);
   }
 
   async recordLoginAttempt(
     staffId: string,
     success: boolean,
     lockedUntil?: number | null,
-    session?: AuthenticatedUserSession
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<void> {
     const lockedUntilIso = lockedUntil ? new Date(lockedUntil).toISOString() : null;
     const executeQuery = async (client: any) => {
@@ -90,16 +99,17 @@ export class PostgresIdentityRepository implements IIdentityRepository {
     };
 
     if (session && session.staffId) {
-      return withTransaction(session, executeQuery);
+      return withTransaction(session, executeQuery, existingClient);
     }
-    return withSystemTransaction(executeQuery);
+    return withSystemTransaction(executeQuery, existingClient);
   }
 
   async updatePassword(
     staffId: string,
     passwordHash: string,
     mustChangePassword: boolean,
-    session?: AuthenticatedUserSession
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<void> {
     if (!session || !session.staffId) {
       throw new AuthorizationError('Authentication session required to update passwords.');
@@ -109,10 +119,13 @@ export class PostgresIdentityRepository implements IIdentityRepository {
         `select private.auth_update_password($1, $2, $3)`,
         [staffId, passwordHash, mustChangePassword]
       );
-    });
+    }, existingClient);
   }
 
-  async listStaff(session?: AuthenticatedUserSession): Promise<any[]> {
+  async listStaff(
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
+  ): Promise<any[]> {
     if (!session || !session.staffId) {
       throw new AuthorizationError('Authentication session required to list staff members.');
     }
@@ -132,10 +145,14 @@ export class PostgresIdentityRepository implements IIdentityRepository {
         createdAt: r.created_at,
         updatedAt: r.updated_at,
       }));
-    });
+    }, existingClient);
   }
 
-  async createStaff(data: any, session?: AuthenticatedUserSession): Promise<any> {
+  async createStaff(
+    data: any,
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
+  ): Promise<any> {
     if (!session || !session.staffId) {
       throw new AuthorizationError('Authentication session required to create staff.');
     }
@@ -165,10 +182,15 @@ export class PostgresIdentityRepository implements IIdentityRepository {
         createdAt: nowIso,
         updatedAt: nowIso,
       };
-    });
+    }, existingClient);
   }
 
-  async updateStaff(staffId: string, data: any, session?: AuthenticatedUserSession): Promise<any> {
+  async updateStaff(
+    staffId: string,
+    data: any,
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
+  ): Promise<any> {
     if (!session || !session.staffId) {
       throw new AuthorizationError('Authentication session required to update staff.');
     }
@@ -199,6 +221,6 @@ export class PostgresIdentityRepository implements IIdentityRepository {
         createdAt: r.created_at,
         updatedAt: r.updated_at,
       };
-    });
+    }, existingClient);
   }
 }

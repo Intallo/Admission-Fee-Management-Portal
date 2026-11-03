@@ -25,30 +25,32 @@ export interface IAcademicYearsRepository {
 }
 
 export interface IAdmissionsRepository {
-  getNextApplicationNumber(academicYearId: string, yearLabel: string, session?: AuthenticatedUserSession): Promise<string>;
-  getNextAdmissionNumber(academicYearId: string, yearLabel: string, session?: AuthenticatedUserSession): Promise<string>;
-  createDraft(payload: any, session?: AuthenticatedUserSession): Promise<any>;
-  updateDraft(applicationId: string, payload: any, session?: AuthenticatedUserSession): Promise<any>;
-  submitApplication(applicationId: string, session?: AuthenticatedUserSession): Promise<any>;
+  getNextApplicationNumber(academicYearId: string, yearLabel: string, session?: AuthenticatedUserSession, client?: any): Promise<string>;
+  getNextAdmissionNumber(academicYearId: string, yearLabel: string, session?: AuthenticatedUserSession, client?: any): Promise<string>;
+  createDraft(payload: any, session?: AuthenticatedUserSession, client?: any): Promise<any>;
+  updateDraft(applicationId: string, payload: any, session?: AuthenticatedUserSession, client?: any): Promise<any>;
+  submitApplication(applicationId: string, session?: AuthenticatedUserSession, client?: any): Promise<any>;
   reviewApplication(
     applicationId: string,
     payload: any,
-    session?: AuthenticatedUserSession
+    session?: AuthenticatedUserSession,
+    client?: any
   ): Promise<any>;
-  rejectApplication(applicationId: string, payload: any, session?: AuthenticatedUserSession): Promise<any>;
-  getApplicationById(applicationId: string, session?: AuthenticatedUserSession): Promise<any>;
-  listApplications(filter: any, session?: AuthenticatedUserSession): Promise<any>;
-  checkCapacity(sectionId: string, academicYearId: string, session?: AuthenticatedUserSession): Promise<any>;
+  rejectApplication(applicationId: string, payload: any, session?: AuthenticatedUserSession, client?: any): Promise<any>;
+  getApplicationById(applicationId: string, session?: AuthenticatedUserSession, client?: any): Promise<any>;
+  listApplications(filter: any, session?: AuthenticatedUserSession, client?: any): Promise<any>;
+  checkCapacity(sectionId: string, academicYearId: string, session?: AuthenticatedUserSession, client?: any): Promise<any>;
   approveApplication(
     applicationId: string,
     payload: any,
-    session?: AuthenticatedUserSession
+    session?: AuthenticatedUserSession,
+    client?: any
   ): Promise<any>;
-  getAcademicRecordById(recordId: string, session?: AuthenticatedUserSession): Promise<any>;
-  listAcademicRecordsForYear(academicYearId: string, session?: AuthenticatedUserSession): Promise<any[]>;
-  getAllAcademicRecords(session?: AuthenticatedUserSession): Promise<any[]>;
-  getStudentById(studentId: string, session?: AuthenticatedUserSession): Promise<any>;
-  getApplicationByRecordId(recordId: string, session?: AuthenticatedUserSession): Promise<any>;
+  getAcademicRecordById(recordId: string, session?: AuthenticatedUserSession, client?: any): Promise<any>;
+  listAcademicRecordsForYear(academicYearId: string, session?: AuthenticatedUserSession, client?: any): Promise<any[]>;
+  getAllAcademicRecords(session?: AuthenticatedUserSession, client?: any): Promise<any[]>;
+  getStudentById(studentId: string, session?: AuthenticatedUserSession, client?: any): Promise<any>;
+  getApplicationByRecordId(recordId: string, session?: AuthenticatedUserSession, client?: any): Promise<any>;
   saveAcademicRecord?(record: any): Promise<void>;
   saveStudent?(student: any): Promise<void>;
   saveFeeAssessment?(assessment: any): Promise<void>;
@@ -163,21 +165,22 @@ export interface ICertificatesRepository {
 }
 
 export interface IDocumentsRepository {
-  listDocumentTypes(session?: AuthenticatedUserSession): Promise<any[]>;
-  listRequirements(gradeLevelId?: string, session?: AuthenticatedUserSession): Promise<any[]>;
-  saveDocument(doc: any, session?: AuthenticatedUserSession): Promise<any>;
-  getDocumentById(documentId: string, session?: AuthenticatedUserSession): Promise<any>;
-  listDocumentsForApplication(applicationId: string, session?: AuthenticatedUserSession): Promise<any[]>;
-  verifyDocument(documentId: string, status: string, reason?: string, session?: AuthenticatedUserSession): Promise<any>;
+  listDocumentTypes(session?: AuthenticatedUserSession, client?: any): Promise<any[]>;
+  listRequirements(gradeLevelId?: string, session?: AuthenticatedUserSession, client?: any): Promise<any[]>;
+  saveDocument(doc: any, session?: AuthenticatedUserSession, client?: any): Promise<any>;
+  getDocumentById(documentId: string, session?: AuthenticatedUserSession, client?: any): Promise<any>;
+  listDocumentsForApplication(applicationId: string, session?: AuthenticatedUserSession, client?: any): Promise<any[]>;
+  verifyDocument(documentId: string, status: string, reason?: string, session?: AuthenticatedUserSession, client?: any): Promise<any>;
   resetForTesting?(): void;
 }
 
 export interface IAuditRepository {
-  recordAuditEvent(input: any, session?: AuthenticatedUserSession): Promise<any>;
-  logAction(entry: any, session?: AuthenticatedUserSession): Promise<void>;
+  recordAuditEvent(input: any, session?: AuthenticatedUserSession, client?: any): Promise<any>;
+  logAction(entry: any, session?: AuthenticatedUserSession, client?: any): Promise<void>;
   getLogs(
     filter: any,
-    session?: AuthenticatedUserSession
+    session?: AuthenticatedUserSession,
+    client?: any
   ): Promise<{ data: any[]; total: number }>;
   resetForTesting?(): void;
 }

@@ -1,37 +1,49 @@
 import { IAuditRepository } from '../interfaces';
 import { query } from '../../db/postgres-pool';
+import { PoolClient } from 'pg';
 import { AuthenticatedUserSession } from '../../../modules/identity-access/types';
 import { AuditLogEntryDTO } from '../../../modules/audit-reporting/types';
 import { randomUUID } from 'crypto';
 
 export class PostgresAuditRepository implements IAuditRepository {
-  async logAction(entry: any, session?: AuthenticatedUserSession): Promise<void> {
+  async logAction(
+    entry: any,
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
+  ): Promise<void> {
     const id = entry.id || randomUUID();
     const nowIso = entry.createdAt || new Date().toISOString();
 
-    await query(
-      `insert into public.audit_logs (
+    const sql = `insert into public.audit_logs (
          id, actor_staff_id, action, entity_type, entity_id,
          before_state, after_state, outcome, reason, created_at
-       ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-      [
-        id,
-        entry.actorStaffId || session?.staffId || null,
-        entry.action,
-        entry.entityType || null,
-        entry.entityId || null,
-        entry.beforeSnapshot ? JSON.stringify(entry.beforeSnapshot) : null,
-        entry.afterSnapshot ? JSON.stringify(entry.afterSnapshot) : null,
-        entry.outcome || 'success',
-        entry.reason || null,
-        nowIso,
-      ],
-      session as any
-    );
+       ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`;
+    const params = [
+      id,
+      entry.actorStaffId || session?.staffId || null,
+      entry.action,
+      entry.entityType || null,
+      entry.entityId || null,
+      entry.beforeSnapshot ? JSON.stringify(entry.beforeSnapshot) : null,
+      entry.afterSnapshot ? JSON.stringify(entry.afterSnapshot) : null,
+      entry.outcome || 'success',
+      entry.reason || null,
+      nowIso,
+    ];
+
+    if (existingClient) {
+      await existingClient.query(sql, params);
+    } else {
+      await query(sql, params, session as any);
+    }
   }
 
-  async recordAuditEvent(input: any, session?: AuthenticatedUserSession): Promise<any> {
-    await this.logAction(input, session);
+  async recordAuditEvent(
+    input: any,
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
+  ): Promise<any> {
+    await this.logAction(input, session, existingClient);
     return input;
   }
 
@@ -43,7 +55,8 @@ export class PostgresAuditRepository implements IAuditRepository {
       limit?: number;
       offset?: number;
     },
-    session?: AuthenticatedUserSession
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<{ data: AuditLogEntryDTO[]; total: number }> {
     const conditions: string[] = [];
     const params: any[] = [];
@@ -64,28 +77,30 @@ export class PostgresAuditRepository implements IAuditRepository {
 
     const where = conditions.length > 0 ? `where ${conditions.join(' and ')}` : '';
 
-    const countRes = await query(
+    const queryFn = existingClient
+      ? (text: string, p: any[]) => existingClient.query(text, p)
+      : (text: string, p: any[]) => query(text, p, session as any);
+
+    const countRes = await queryFn(
       `select count(*)::int as total from public.audit_logs ${where}`,
-      params,
-      session as any
+      params
     );
     const total = countRes.rows[0]?.total || 0;
 
     const limit = filter.limit || 50;
     const offset = filter.offset || 0;
 
-    const listRes = await query(
+    const listRes = await queryFn(
       `select a.*, s.full_name as actor_name, s.role as actor_role
        from public.audit_logs a
        left join public.staff_members s on s.id = a.actor_staff_id
        ${where}
        order by a.created_at desc
        limit $${pIdx++} offset $${pIdx++}`,
-      [...params, limit, offset],
-      session as any
+      [...params, limit, offset]
     );
 
-    const data: AuditLogEntryDTO[] = listRes.rows.map((r) => ({
+    const data: AuditLogEntryDTO[] = listRes.rows.map((r: any) => ({
       id: r.id,
       actorStaffId: r.actor_staff_id,
       actorName: r.actor_name || 'System / Batch Job',

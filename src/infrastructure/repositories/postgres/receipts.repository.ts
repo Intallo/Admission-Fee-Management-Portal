@@ -1,5 +1,5 @@
 import { IReceiptsRepository } from '../interfaces';
-import { withTransaction, query } from '../../db/postgres-pool';
+import { withTransaction } from '../../db/postgres-pool';
 import { AuthenticatedUserSession } from '../../../modules/identity-access/types';
 import {
   ConsolidatedReceiptDTO,

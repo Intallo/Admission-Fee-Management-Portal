@@ -1,5 +1,6 @@
 import 'server-only';
 import crypto from 'crypto';
+import { AsyncLocalStorage } from 'async_hooks';
 import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
 import { getServerEnv } from '../../lib/env';
 import { assertServerOnly, assertDisposableDatabase } from './guards';
@@ -7,6 +8,18 @@ import { AuthenticatedUserSession } from '../../modules/identity-access/types';
 import { logger } from '../../lib/logger';
 
 let singletonPool: Pool | null = null;
+
+export interface ActiveTransactionContext {
+  client: PoolClient;
+  actorSession?: AuthenticatedUserSession;
+  isSystem?: boolean;
+}
+
+export const activeTransactionStorage = new AsyncLocalStorage<ActiveTransactionContext>();
+
+export function getActiveTransactionContext(): ActiveTransactionContext | undefined {
+  return activeTransactionStorage.getStore();
+}
 
 /**
  * Generates an HMAC-SHA256 signature for actor verification in PostgreSQL RLS context.
@@ -89,10 +102,14 @@ export function getPostgresPool(): Pool {
  * Executes an isolated transaction with transaction-local actor context for RLS scoping.
  * Guarantees atomicity, automatic rollback on error, and strict cleanup of session variables upon return.
  * Actor session is mandatory to prevent actorless queries against protected tables.
+ *
+ * If an existing client or active transaction context is provided, reuses the existing client
+ * without requesting a second connection from the pool.
  */
 export async function withTransaction<T>(
   actorSession: AuthenticatedUserSession,
-  callback: (client: PoolClient) => Promise<T>
+  callback: (client: PoolClient) => Promise<T>,
+  existingClient?: PoolClient
 ): Promise<T> {
   if (!actorSession || !actorSession.staffId || !actorSession.role) {
     throw new Error(
@@ -106,7 +123,19 @@ export async function withTransaction<T>(
     );
   }
 
+  if (existingClient) {
+    return callback(existingClient);
+  }
 
+  const activeTx = activeTransactionStorage.getStore();
+  if (activeTx && activeTx.client) {
+    if (activeTx.actorSession && activeTx.actorSession.staffId !== actorSession.staffId) {
+      throw new Error(
+        `[SECURITY ERROR] Cannot switch actor session inside active transaction from "${activeTx.actorSession.staffId}" to "${actorSession.staffId}".`
+      );
+    }
+    return callback(activeTx.client);
+  }
 
   const pool = getPostgresPool();
   const client = await pool.connect();
@@ -121,7 +150,10 @@ export async function withTransaction<T>(
       [actorSession.staffId, actorSession.role, signature]
     );
 
-    const result = await callback(client);
+    const result = await activeTransactionStorage.run(
+      { client, actorSession, isSystem: false },
+      () => callback(client)
+    );
     await client.query('COMMIT');
     return result;
   } catch (error) {
@@ -145,11 +177,22 @@ export async function withTransaction<T>(
 /**
  * Executes an isolated transaction for unauthenticated system operations (e.g. login credentials lookup).
  * Prohibits accessing protected business tables without an active actor.
+ *
+ * If an existing client or active transaction context is provided, reuses the existing client
+ * without requesting a second connection from the pool.
  */
 export async function withSystemTransaction<T>(
-  callback: (client: PoolClient) => Promise<T>
+  callback: (client: PoolClient) => Promise<T>,
+  existingClient?: PoolClient
 ): Promise<T> {
+  if (existingClient) {
+    return callback(existingClient);
+  }
 
+  const activeTx = activeTransactionStorage.getStore();
+  if (activeTx && activeTx.client) {
+    return callback(activeTx.client);
+  }
 
   const pool = getPostgresPool();
   const client = await pool.connect();
@@ -161,7 +204,10 @@ export async function withSystemTransaction<T>(
       "SELECT set_config('app.current_staff_id', '', true), set_config('app.current_role', '', true), set_config('app.actor_signature', '', true)"
     );
 
-    const result = await callback(client);
+    const result = await activeTransactionStorage.run(
+      { client, isSystem: true },
+      () => callback(client)
+    );
     await client.query('COMMIT');
     return result;
   } catch (error) {
@@ -183,8 +229,16 @@ export async function withSystemTransaction<T>(
 
 export async function runWithSessionOrSystem<T>(
   session: AuthenticatedUserSession | undefined,
-  callback: (client: PoolClient) => Promise<T>
+  callback: (client: PoolClient) => Promise<T>,
+  existingClient?: PoolClient
 ): Promise<T> {
+  if (existingClient) {
+    return callback(existingClient);
+  }
+  const activeTx = activeTransactionStorage.getStore();
+  if (activeTx && activeTx.client) {
+    return callback(activeTx.client);
+  }
   if (session && session.staffId) {
     return withTransaction(session, callback);
   }
@@ -193,12 +247,21 @@ export async function runWithSessionOrSystem<T>(
 
 /**
  * Executes a parameterized query within mandatory actor session context.
+ * If an active transaction or client exists, automatically reuses the existing client.
  */
 export async function query<R extends QueryResultRow = any>(
   text: string,
   params: any[] = [],
-  actorSession?: AuthenticatedUserSession
+  actorSession?: AuthenticatedUserSession,
+  existingClient?: PoolClient
 ): Promise<QueryResult<R>> {
+  if (existingClient) {
+    return existingClient.query<R>(text, params);
+  }
+  const activeTx = activeTransactionStorage.getStore();
+  if (activeTx && activeTx.client) {
+    return activeTx.client.query<R>(text, params);
+  }
   return runWithSessionOrSystem(actorSession, (client) => client.query<R>(text, params));
 }
 

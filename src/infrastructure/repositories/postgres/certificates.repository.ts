@@ -1,5 +1,6 @@
 import { ICertificatesRepository } from '../interfaces';
-import { withTransaction, query } from '../../db/postgres-pool';
+import { withTransaction } from '../../db/postgres-pool';
+import { PoolClient } from 'pg';
 import { AuthenticatedUserSession } from '../../../modules/identity-access/types';
 import {
   CertificateKind,
@@ -19,24 +20,34 @@ import { CertificateNumber, toDecimalInrString } from '../../../modules/shared/t
 import { formatInr } from '../../../lib/money/inr';
 
 export class PostgresCertificatesRepository implements ICertificatesRepository {
-  async getNextCertificateNumber(prefix?: string, session?: AuthenticatedUserSession): Promise<string> {
+  async getNextCertificateNumber(
+    prefix?: string,
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
+  ): Promise<string> {
     if (!session || !session.staffId) {
       throw new AuthorizationError('Authenticated user session is required for certificate operations.');
     }
-    return withTransaction(session, async (client: any) => {
+    const runInTx = async (client: any) => {
       const numRes = await client.query(`select private.next_certificate_number($1) as num`, [prefix || 'TC']);
       return numRes.rows[0].num;
-    });
+    };
+
+    if (existingClient) {
+      return runInTx(existingClient);
+    }
+    return withTransaction(session, runInTx);
   }
 
   async prepopulateCertificate(
     studentAcademicRecordId: string,
-    session?: AuthenticatedUserSession
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<StudentCertificateDTO> {
     if (!session || !session.staffId) {
       throw new AuthorizationError('Authenticated user session is required for certificate operations.');
     }
-    return withTransaction(session, async (client: any) => {
+    const runInTx = async (client: any) => {
       // 1. Check existing certificate
       const existRes = await client.query(
         `select * from public.student_year_certificates where student_academic_record_id = $1`,
@@ -110,41 +121,58 @@ export class PostgresCertificatesRepository implements ICertificatesRepository {
       );
 
       return this.mapCertificateRow(created.rows[0], client);
-    });
+    };
+
+    if (existingClient) {
+      return runInTx(existingClient);
+    }
+    return withTransaction(session, runInTx);
   }
 
   async getCertificateById(
     certificateId: string,
-    session?: AuthenticatedUserSession
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<StudentCertificateDTO | undefined> {
     if (!session || !session.staffId) {
       throw new AuthorizationError('Authenticated user session is required for certificate operations.');
     }
-    return withTransaction(session, async (client: any) => {
+    const runInTx = async (client: any) => {
       const res = await client.query(
         `select * from public.student_year_certificates where id = $1`,
         [certificateId]
       );
       if (res.rowCount === 0) return undefined;
       return this.mapCertificateRow(res.rows[0], client);
-    });
+    };
+
+    if (existingClient) {
+      return runInTx(existingClient);
+    }
+    return withTransaction(session, runInTx);
   }
 
   async getCertificateByStudentRecordId(
     studentRecordId: string,
-    session?: AuthenticatedUserSession
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<StudentCertificateDTO | undefined> {
     if (!session || !session.staffId) {
       throw new AuthorizationError('Authenticated user session is required for certificate operations.');
     }
-    return withTransaction(session, async (client: any) => {
+    const runInTx = async (client: any) => {
       const res = await client.query(
         `select * from public.student_year_certificates where student_academic_record_id = $1`,
         [studentRecordId]
       );
       if (res.rowCount === 0) return undefined;
       return this.mapCertificateRow(res.rows[0], client);
-    });
+    };
+
+    if (existingClient) {
+      return runInTx(existingClient);
+    }
+    return withTransaction(session, runInTx);
   }
 
   async reviewCertificate(
@@ -162,9 +190,10 @@ export class PostgresCertificatesRepository implements ICertificatesRepository {
       progress?: string;
       remarks?: string;
     },
-    session: AuthenticatedUserSession
+    session: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<StudentCertificateDTO> {
-    return withTransaction(session, async (client) => {
+    const runInTx = async (client: PoolClient) => {
       if (!['clerk', 'admission_officer', 'principal'].includes(session.role)) {
         throw new AuthorizationError('Access Denied: Only Clerks or Admission Officers can review certificates.');
       }
@@ -214,7 +243,12 @@ export class PostgresCertificatesRepository implements ICertificatesRepository {
 
       const updated = await client.query(`select * from public.student_year_certificates where id = $1`, [certificateId]);
       return this.mapCertificateRow(updated.rows[0], client);
-    });
+    };
+
+    if (existingClient) {
+      return runInTx(existingClient);
+    }
+    return withTransaction(session, runInTx);
   }
 
   async issueCertificate(
@@ -224,9 +258,10 @@ export class PostgresCertificatesRepository implements ICertificatesRepository {
       decisionReason?: string;
       duesOverrideReason?: string;
     },
-    session: AuthenticatedUserSession
+    session: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<StudentCertificateDTO> {
-    return withTransaction(session, async (client) => {
+    const runInTx = async (client: PoolClient) => {
       if (session.role !== 'principal') {
         throw new AuthorizationError('Access Denied: Only the Principal holds authority to approve and issue certificates.');
       }
@@ -318,19 +353,23 @@ export class PostgresCertificatesRepository implements ICertificatesRepository {
         [randomUUID(), session.staffId, certificateId, `Issued TC ${tcNumber}`, nowIso]
       );
 
-      // NOTE: Per Directive 4, issuance must NOT automatically mark student Left or Transferred.
-
       const updated = await client.query(`select * from public.student_year_certificates where id = $1`, [certificateId]);
       return this.mapCertificateRow(updated.rows[0], client);
-    });
+    };
+
+    if (existingClient) {
+      return runInTx(existingClient);
+    }
+    return withTransaction(session, runInTx);
   }
 
   async reprintCertificate(
     certificateId: string,
     reason: string,
-    session: AuthenticatedUserSession
+    session: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<StudentCertificateDTO> {
-    return withTransaction(session, async (client) => {
+    const runInTx = async (client: PoolClient) => {
       if (!['clerk', 'principal', 'admission_officer'].includes(session.role)) {
         throw new AuthorizationError('Access Denied: Unauthorized role for certificate reprint.');
       }
@@ -364,14 +403,23 @@ export class PostgresCertificatesRepository implements ICertificatesRepository {
 
       const updated = await client.query(`select * from public.student_year_certificates where id = $1`, [certificateId]);
       return this.mapCertificateRow(updated.rows[0], client);
-    });
+    };
+
+    if (existingClient) {
+      return runInTx(existingClient);
+    }
+    return withTransaction(session, runInTx);
   }
 
-  async listCertificates(filter?: any, session?: AuthenticatedUserSession): Promise<StudentCertificateDTO[]> {
+  async listCertificates(
+    filter?: any,
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
+  ): Promise<StudentCertificateDTO[]> {
     if (!session || !session.staffId) {
       throw new AuthorizationError('Authenticated user session is required for certificate operations.');
     }
-    return withTransaction(session, async (client: any) => {
+    const runInTx = async (client: any) => {
       let sql = `select * from public.student_year_certificates order by created_at desc`;
       const res = await client.query(sql);
       const list: StudentCertificateDTO[] = [];
@@ -379,7 +427,12 @@ export class PostgresCertificatesRepository implements ICertificatesRepository {
         list.push(await this.mapCertificateRow(row, client));
       }
       return list;
-    });
+    };
+
+    if (existingClient) {
+      return runInTx(existingClient);
+    }
+    return withTransaction(session, runInTx);
   }
 
   private async mapCertificateRow(row: any, client: any): Promise<StudentCertificateDTO> {

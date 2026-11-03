@@ -1,5 +1,6 @@
 import { IAdmissionsRepository } from '../interfaces';
 import { withTransaction, query } from '../../db/postgres-pool';
+import { PoolClient } from 'pg';
 import { AuthenticatedUserSession } from '../../../modules/identity-access/types';
 import {
   AdmissionApplicationDetailDTO,
@@ -36,20 +37,21 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
   async getNextApplicationNumber(
     academicYearId: string,
     yearLabel: string,
-    session: AuthenticatedUserSession
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<string> {
     const shortLabel = this.formatAcademicYearShort(yearLabel);
     const seriesCode = `APP-${shortLabel}`;
 
-    const res = await query(
-      `insert into public.receipt_number_counters as c (series_code, next_value)
+    const sql = `insert into public.receipt_number_counters as c (series_code, next_value)
        values ($1, 2)
        on conflict (series_code) do update
          set next_value = c.next_value + 1, updated_at = now()
-       returning c.next_value - 1 as val`,
-      [seriesCode],
-      session
-    );
+       returning c.next_value - 1 as val`;
+
+    const res = existingClient
+      ? await existingClient.query(sql, [seriesCode])
+      : await query(sql, [seriesCode], session);
 
     const seq = res.rows[0].val;
     return `${seq}/${shortLabel}`;
@@ -58,21 +60,22 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
   async getNextAdmissionNumber(
     academicYearId: string,
     yearLabel: string,
-    session: AuthenticatedUserSession
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<string> {
-    const res = await query(
-      `select private.next_admission_number('ADM') as val`,
-      [],
-      session
-    );
+    const sql = `select private.next_admission_number('ADM') as val`;
+    const res = existingClient
+      ? await existingClient.query(sql, [])
+      : await query(sql, [], session);
     return res.rows[0].val;
   }
 
   async createDraft(
     payload: any,
-    session: AuthenticatedUserSession
+    session: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<any> {
-    return withTransaction(session, async (client) => {
+    const runInTx = async (client: PoolClient) => {
       // Fetch academic year
       const yearRes = await client.query(
         `select id, label from public.academic_years where id = $1`,
@@ -83,7 +86,12 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
       }
       const yearLabel = yearRes.rows[0].label;
 
-      const applicationNumber = await this.getNextApplicationNumber(payload.academicYearId, yearLabel, session);
+      const applicationNumber = await this.getNextApplicationNumber(
+        payload.academicYearId,
+        yearLabel,
+        session,
+        client
+      );
 
       // Create student record
       const studentId = randomUUID();
@@ -185,16 +193,22 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
         [randomUUID(), session.staffId, applicationId, `Created draft application ${applicationNumber}`, nowIso]
       );
 
-      return this.getApplicationById(applicationId, session);
-    });
+      return this.getApplicationById(applicationId, session, client);
+    };
+
+    if (existingClient) {
+      return runInTx(existingClient);
+    }
+    return withTransaction(session, runInTx);
   }
 
   async updateDraft(
     applicationId: string,
     payload: any,
-    session: AuthenticatedUserSession
+    session: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<any> {
-    return withTransaction(session, async (client) => {
+    const runInTx = async (client: PoolClient) => {
       const appRes = await client.query(
         `select * from public.admission_applications where id = $1`,
         [applicationId]
@@ -246,13 +260,22 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
         );
       }
 
-      const updated = await this.getApplicationById(applicationId, session);
+      const updated = await this.getApplicationById(applicationId, session, client);
       return updated!;
-    });
+    };
+
+    if (existingClient) {
+      return runInTx(existingClient);
+    }
+    return withTransaction(session, runInTx);
   }
 
-  async submitApplication(applicationId: string, session: AuthenticatedUserSession): Promise<any> {
-    return withTransaction(session, async (client) => {
+  async submitApplication(
+    applicationId: string,
+    session: AuthenticatedUserSession,
+    existingClient?: PoolClient
+  ): Promise<any> {
+    const runInTx = async (client: PoolClient) => {
       const nowIso = new Date().toISOString();
       await client.query(
         `update public.admission_applications set status = 'submitted', updated_at = $1 where id = $2`,
@@ -263,12 +286,22 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
          values ($1, $2, 'draft', 'submitted', $3, 'Submitted application.', $4)`,
         [randomUUID(), applicationId, session.staffId, nowIso]
       );
-      return this.getApplicationById(applicationId, session);
-    });
+      return this.getApplicationById(applicationId, session, client);
+    };
+
+    if (existingClient) {
+      return runInTx(existingClient);
+    }
+    return withTransaction(session, runInTx);
   }
 
-  async reviewApplication(applicationId: string, payload: any, session: AuthenticatedUserSession): Promise<any> {
-    return withTransaction(session, async (client) => {
+  async reviewApplication(
+    applicationId: string,
+    payload: any,
+    session: AuthenticatedUserSession,
+    existingClient?: PoolClient
+  ): Promise<any> {
+    const runInTx = async (client: PoolClient) => {
       const curr = await client.query('select status from public.admission_applications where id = $1', [applicationId]);
       if (curr.rowCount === 0) throw new NotFoundError(`Admission application "${applicationId}" not found.`);
       const fromStatus = curr.rows[0].status;
@@ -290,12 +323,22 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
          values ($1, $2, $3, $4, $5, $6, $7)`,
         [randomUUID(), applicationId, fromStatus, toStatus, session.staffId, payload.remarks || 'Reviewed application.', nowIso]
       );
-      return this.getApplicationById(applicationId, session);
-    });
+      return this.getApplicationById(applicationId, session, client);
+    };
+
+    if (existingClient) {
+      return runInTx(existingClient);
+    }
+    return withTransaction(session, runInTx);
   }
 
-  async rejectApplication(applicationId: string, payload: any, session: AuthenticatedUserSession): Promise<any> {
-    return withTransaction(session, async (client) => {
+  async rejectApplication(
+    applicationId: string,
+    payload: any,
+    session: AuthenticatedUserSession,
+    existingClient?: PoolClient
+  ): Promise<any> {
+    const runInTx = async (client: PoolClient) => {
       if (session.role !== 'principal') {
         throw new AuthorizationError('Only Principal can reject an admission application.');
       }
@@ -313,45 +356,52 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
          values ($1, $2, $3, 'rejected', $4, $5, $6)`,
         [randomUUID(), applicationId, fromStatus, session.staffId, payload.decisionReason || 'Rejected by Principal.', nowIso]
       );
-      return this.getApplicationById(applicationId, session);
-    });
+      return this.getApplicationById(applicationId, session, client);
+    };
+
+    if (existingClient) {
+      return runInTx(existingClient);
+    }
+    return withTransaction(session, runInTx);
   }
 
   async getApplicationById(
     applicationId: string,
-    session: AuthenticatedUserSession
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<any> {
-    const res = await query(
+    const queryFn = existingClient
+      ? (text: string, params: any[]) => existingClient.query(text, params)
+      : (text: string, params: any[]) => query(text, params, session);
+
+    const res = await queryFn(
       `select a.*, s.first_name, s.last_name, s.dob, s.gender, s.nationality, s.mother_tongue,
               s.blood_group, s.sts_number, s.dise_number, s.caste, s.subcaste, s.transport_opted_in
        from public.admission_applications a
        join public.students s on s.id = a.student_id
        where a.id = $1`,
-      [applicationId],
-      session
+      [applicationId]
     );
 
     if (res.rowCount === 0) return undefined;
     const r = res.rows[0];
 
     // Fetch guardians
-    const guardRes = await query(
+    const guardRes = await queryFn(
       `select g.*, sg.is_primary_contact from public.student_guardians sg
        join public.guardians g on g.id = sg.guardian_id
        where sg.student_id = $1`,
-      [r.student_id],
-      session
+      [r.student_id]
     );
 
     // Fetch history
-    const histRes = await query(
+    const histRes = await queryFn(
       `select h.*, sm.full_name as staff_name, sm.role as staff_role
        from public.admission_status_history h
        left join public.staff_members sm on sm.id = h.changed_by
        where h.admission_application_id = $1
        order by h.created_at asc`,
-      [applicationId],
-      session
+      [applicationId]
     );
 
     return {
@@ -376,7 +426,7 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
         subcaste: r.subcaste,
         transportOptedIn: r.transport_opted_in,
       },
-      guardians: guardRes.rows.map((g) => ({
+      guardians: guardRes.rows.map((g: any) => ({
         id: g.id,
         relationship: g.relationship,
         fullName: g.full_name,
@@ -386,7 +436,7 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
         annualIncome: g.annual_income,
         isPrimaryContact: g.is_primary_contact,
       })),
-      statusHistory: histRes.rows.map((h) => ({
+      statusHistory: histRes.rows.map((h: any) => ({
         id: h.id,
         fromStatus: h.from_status,
         toStatus: h.to_status,
@@ -405,8 +455,13 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
 
   async listApplications(
     filter: any,
-    session: AuthenticatedUserSession
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<any> {
+    const queryFn = existingClient
+      ? (text: string, params: any[]) => existingClient.query(text, params)
+      : (text: string, params: any[]) => query(text, params, session);
+
     const conditions: string[] = [];
     const params: any[] = [];
     let pIdx = 1;
@@ -429,10 +484,9 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
     }
 
     const whereClause = conditions.length > 0 ? `where ${conditions.join(' and ')}` : '';
-    const totalRes = await query(
+    const totalRes = await queryFn(
       `select count(*) as cnt from public.admission_applications a ${whereClause}`,
-      params,
-      session
+      params
     );
     const total = parseInt(totalRes.rows[0].cnt, 10);
 
@@ -440,7 +494,7 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
     const offset = filter.offset || 0;
     params.push(limit, offset);
 
-    const listRes = await query(
+    const listRes = await queryFn(
       `select a.id, a.application_number, a.academic_year_id, a.status, a.student_id,
               s.first_name, s.last_name, g.name as grade_name, sec.name as section_name, y.label as year_label
        from public.admission_applications a
@@ -451,11 +505,10 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
        ${whereClause}
        order by a.created_at desc
        limit $${pIdx++} offset $${pIdx++}`,
-      params,
-      session
+      params
     );
 
-    const data: any[] = listRes.rows.map((r) => ({
+    const data: any[] = listRes.rows.map((r: any) => ({
       id: r.id,
       applicationNumber: r.application_number,
       academicYearId: r.academic_year_id,
@@ -496,15 +549,19 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
   async checkCapacity(
     sectionId: string,
     academicYearId: string,
-    session: AuthenticatedUserSession
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<any> {
-    const secRes = await query(
+    const queryFn = existingClient
+      ? (text: string, params: any[]) => existingClient.query(text, params)
+      : (text: string, params: any[]) => query(text, params, session);
+
+    const secRes = await queryFn(
       `select s.id, s.name as section_name, s.max_capacity, g.id as grade_id, g.name as grade_name, g.group_name
        from public.sections s
        join public.grade_levels g on g.id = s.grade_level_id
        where s.id = $1 and s.academic_year_id = $2`,
-      [sectionId, academicYearId],
-      session
+      [sectionId, academicYearId]
     );
 
     if (secRes.rowCount === 0) {
@@ -513,20 +570,18 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
 
     const sec = secRes.rows[0];
 
-    const enrollRes = await query(
+    const enrollRes = await queryFn(
       `select count(*) as cnt from public.student_academic_records
        where section_id = $1 and academic_year_id = $2 and status in ('admitted', 'active')`,
-      [sectionId, academicYearId],
-      session
+      [sectionId, academicYearId]
     );
     const enrolledInSection = parseInt(enrollRes.rows[0].cnt, 10);
 
-    const groupEnrollRes = await query(
+    const groupEnrollRes = await queryFn(
       `select count(*) as cnt from public.student_academic_records r
        join public.grade_levels g on g.id = r.grade_level_id
        where g.group_name = $1 and r.academic_year_id = $2 and r.status in ('admitted', 'active')`,
-      [sec.group_name, academicYearId],
-      session
+      [sec.group_name, academicYearId]
     );
     const enrolledInGroup = parseInt(groupEnrollRes.rows[0].cnt, 10);
 
@@ -556,9 +611,10 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
   async approveApplication(
     applicationId: string,
     payload: { sectionId: string; remarks?: string },
-    session: AuthenticatedUserSession
+    session: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<any> {
-    return withTransaction(session, async (client) => {
+    const runInTx = async (client: PoolClient) => {
       // 1. Principal Role Check
       if (session.role !== 'principal') {
         throw new AuthorizationError('Access Denied: Only the Principal holds authority to approve student admissions.');
@@ -613,7 +669,7 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
       const countRes = await client.query(
         `select count(*) as cnt from public.student_academic_records
          where section_id = $1 and academic_year_id = $2 and status in ('admitted', 'active')`,
-        [payload.sectionId, app.academic_year_id]
+         [payload.sectionId, app.academic_year_id]
       );
       const currentEnrolled = parseInt(countRes.rows[0].cnt, 10);
       if (currentEnrolled >= secRow.max_capacity) {
@@ -745,17 +801,23 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
         initialBilledAmountInr: initialBilledAmount,
         feeGenerated,
       };
-    });
+    };
+
+    if (existingClient) {
+      return runInTx(existingClient);
+    }
+    return withTransaction(session, runInTx);
   }
 
   async getAcademicRecordById(
     recordId: string,
-    session?: AuthenticatedUserSession
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<any> {
     if (!session || !session.staffId) {
       throw new AuthorizationError('Authenticated user session is required for database operations.');
     }
-    return withTransaction(session, async (client: any) => {
+    const runInTx = async (client: any) => {
       const res = await client.query(
         `select * from public.student_academic_records where id = $1`,
         [recordId]
@@ -776,17 +838,23 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
         notes: r.notes,
         createdAt: r.created_at,
       };
-    });
+    };
+
+    if (existingClient) {
+      return runInTx(existingClient);
+    }
+    return withTransaction(session, runInTx);
   }
 
   async listAcademicRecordsForYear(
     academicYearId: string,
-    session?: AuthenticatedUserSession
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<any[]> {
     if (!session || !session.staffId) {
       throw new AuthorizationError('Authenticated user session is required for database operations.');
     }
-    return withTransaction(session, async (client: any) => {
+    const runInTx = async (client: any) => {
       const res = await client.query(
         `select * from public.student_academic_records where academic_year_id = $1 order by created_at desc`,
         [academicYearId]
@@ -805,14 +873,22 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
         notes: r.notes,
         createdAt: r.created_at,
       }));
-    });
+    };
+
+    if (existingClient) {
+      return runInTx(existingClient);
+    }
+    return withTransaction(session, runInTx);
   }
 
-  async getAllAcademicRecords(session?: AuthenticatedUserSession): Promise<any[]> {
+  async getAllAcademicRecords(
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
+  ): Promise<any[]> {
     if (!session || !session.staffId) {
       throw new AuthorizationError('Authenticated user session is required for database operations.');
     }
-    return withTransaction(session, async (client: any) => {
+    const runInTx = async (client: any) => {
       const res = await client.query(`select * from public.student_academic_records order by created_at desc`);
       return res.rows.map((r: any) => ({
         id: r.id,
@@ -828,14 +904,23 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
         notes: r.notes,
         createdAt: r.created_at,
       }));
-    });
+    };
+
+    if (existingClient) {
+      return runInTx(existingClient);
+    }
+    return withTransaction(session, runInTx);
   }
 
-  async getStudentById(studentId: string, session?: AuthenticatedUserSession): Promise<any> {
+  async getStudentById(
+    studentId: string,
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
+  ): Promise<any> {
     if (!session || !session.staffId) {
       throw new AuthorizationError('Authenticated user session is required for database operations.');
     }
-    return withTransaction(session, async (client: any) => {
+    const runInTx = async (client: any) => {
       const res = await client.query(`select * from public.students where id = $1`, [studentId]);
       if (res.rowCount === 0) return null;
       const r = res.rows[0];
@@ -857,14 +942,23 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
         diseNumber: r.dise_number,
         transportOptedIn: r.transport_opted_in,
       };
-    });
+    };
+
+    if (existingClient) {
+      return runInTx(existingClient);
+    }
+    return withTransaction(session, runInTx);
   }
 
-  async getApplicationByRecordId(recordId: string, session?: AuthenticatedUserSession): Promise<any> {
+  async getApplicationByRecordId(
+    recordId: string,
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
+  ): Promise<any> {
     if (!session || !session.staffId) {
       throw new AuthorizationError('Authenticated user session is required for database operations.');
     }
-    return withTransaction(session, async (client: any) => {
+    const runInTx = async (client: any) => {
       const recRes = await client.query(
         `select student_id, academic_year_id from public.student_academic_records where id = $1`,
         [recordId]
@@ -876,7 +970,12 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
         [student_id, academic_year_id]
       );
       if (appRes.rowCount === 0) return null;
-      return this.getApplicationById(appRes.rows[0].id, session);
-    });
+      return this.getApplicationById(appRes.rows[0].id, session, client);
+    };
+
+    if (existingClient) {
+      return runInTx(existingClient);
+    }
+    return withTransaction(session, runInTx);
   }
 }
