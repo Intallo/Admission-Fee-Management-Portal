@@ -54,7 +54,7 @@ export class CertificatesService {
     await academicYearsService.getAcademicYearById(academicYearId);
     await academicYearsService.assertYearIsNotClosed(academicYearId);
 
-    const records = admissionsService.getAllAcademicRecords().filter((r) => r.academicYearId === academicYearId);
+    const records = (await admissionsService.getAllAcademicRecordsAsync(session)).filter((r) => r.academicYearId === academicYearId);
     let createdCount = 0;
     for (const rec of records) {
       try {

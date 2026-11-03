@@ -289,7 +289,10 @@ export class AuditReportingService {
     const year = await academicYearsService.getAcademicYearById(targetYearId);
 
     // 1. Admission Applications Breakdown
-    const allApps = admissionsService.getAllApplications().filter((a) => a.academicYearId === targetYearId);
+    const allApps = admissionsService.isPostgres()
+      ? (await admissionsService.getAllApplicationsAsync(session)).filter((a) => a.academicYearId === targetYearId)
+      : admissionsService.getAllApplications().filter((a) => a.academicYearId === targetYearId);
+
     const applicationsByStatus = {
       draft: allApps.filter((a) => a.status === 'draft').length,
       submitted: allApps.filter((a) => a.status === 'submitted').length,
@@ -301,9 +304,11 @@ export class AuditReportingService {
     };
 
     // 2. Student Enrollment & Status Counts
-    const allRecords = admissionsService
-      .getAllAcademicRecords()
-      .filter((r) => r.academicYearId === targetYearId);
+    const allRecords = admissionsService.isPostgres()
+      ? (await admissionsService.getAllAcademicRecordsAsync(session)).filter((r) => r.academicYearId === targetYearId)
+      : admissionsService
+          .getAllAcademicRecords()
+          .filter((r) => r.academicYearId === targetYearId);
 
     const totalAdmittedStudents = allRecords.filter(
       (r) => r.status === 'admitted' || r.status === 'active'
@@ -314,16 +319,20 @@ export class AuditReportingService {
     ).length;
 
     // 3. Section Seat Capacities & Utilization
-    const allSections = admissionsService
-      .getAllSections()
-      .filter((s) => s.academicYearId === targetYearId);
+    const allSections = admissionsService.isPostgres()
+      ? (await admissionsService.getAllSectionsAsync(targetYearId, session)).filter((s) => s.academicYearId === targetYearId)
+      : admissionsService
+          .getAllSections()
+          .filter((s) => s.academicYearId === targetYearId);
 
     const sectionsCapacity: SectionSeatMetricDTO[] = [];
     let totalSeatCapacity = 0;
     let totalSeatsUsed = 0;
 
     for (const sec of allSections) {
-      const grade = admissionsService.getGradeLevel(sec.gradeLevelId);
+      const grade = admissionsService.isPostgres()
+        ? await admissionsService.getGradeLevelAsync(sec.gradeLevelId, session)
+        : admissionsService.getGradeLevel(sec.gradeLevelId);
       const enrolledCount = allRecords.filter(
         (r) => r.sectionId === sec.id && (r.status === 'admitted' || r.status === 'active')
       ).length;

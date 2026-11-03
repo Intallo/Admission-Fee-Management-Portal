@@ -206,6 +206,8 @@ export interface ApplicationListFilterDTO {
   sectionId?: UUID;
   search?: string;
   feeNotGenerated?: boolean;
+  limit?: number;
+  offset?: number;
 }
 
 export interface ApplicationStatusCountsDTO {
