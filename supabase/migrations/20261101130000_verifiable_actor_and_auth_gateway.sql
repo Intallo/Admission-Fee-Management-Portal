@@ -450,10 +450,15 @@ declare
   v_default_year_id uuid;
 begin
   select id into v_default_year_id from public.academic_years where status = 'current' limit 1;
+  if v_default_year_id is null then
+    select id into v_default_year_id from public.academic_years order by start_date desc limit 1;
+  end if;
   if v_default_year_id is not null then
     update public.receipt_number_counters
     set academic_year_id = v_default_year_id
     where academic_year_id is null;
+  else
+    delete from public.receipt_number_counters where academic_year_id is null;
   end if;
 end $$;
 
@@ -468,9 +473,8 @@ begin
   end if;
 end $$;
 
--- Re-establish primary key with academic_year_id (fallback to 00000000-0000-0000-0000-000000000000 for legacy)
-alter table public.receipt_number_counters alter column academic_year_id set default '00000000-0000-0000-0000-000000000000';
-update public.receipt_number_counters set academic_year_id = '00000000-0000-0000-0000-000000000000' where academic_year_id is null;
+-- Re-establish primary key with academic_year_id (without invalid zero-UUID default)
+alter table public.receipt_number_counters alter column academic_year_id drop default;
 alter table public.receipt_number_counters alter column academic_year_id set not null;
 alter table public.receipt_number_counters add primary key (series_code, academic_year_id);
 
@@ -495,16 +499,18 @@ begin
     select id, label into v_year_id, v_year_label
     from public.academic_years where status = 'current' limit 1;
   else
-    select label into v_year_label
+    select id, label into v_year_id, v_year_label
     from public.academic_years where id = v_year_id;
   end if;
 
   if v_year_id is null then
-    v_year_id := '00000000-0000-0000-0000-000000000000';
-    v_year_prefix := pg_catalog.to_char(pg_catalog.now() at time zone 'Asia/Kolkata', 'YYYY');
-  else
-    v_year_prefix := pg_catalog.coalesce(pg_catalog.substring(v_year_label, 1, 4), pg_catalog.to_char(pg_catalog.now() at time zone 'Asia/Kolkata', 'YYYY'));
+    raise exception 'Academic year not found or specified for receipt numbering';
   end if;
+
+  v_year_prefix := pg_catalog.coalesce(
+    nullif(pg_catalog.substring(v_year_label from '^([0-9]{4})'), ''),
+    pg_catalog.to_char(pg_catalog.now() at time zone 'Asia/Kolkata', 'YYYY')
+  );
 
   insert into public.receipt_number_counters as c (series_code, academic_year_id, next_value)
   values (p_series, v_year_id, 2)
@@ -537,16 +543,18 @@ begin
     select id, label into v_year_id, v_year_label
     from public.academic_years where status = 'current' limit 1;
   else
-    select label into v_year_label
+    select id, label into v_year_id, v_year_label
     from public.academic_years where id = v_year_id;
   end if;
 
   if v_year_id is null then
-    v_year_id := '00000000-0000-0000-0000-000000000000';
-    v_year_prefix := pg_catalog.to_char(pg_catalog.now() at time zone 'Asia/Kolkata', 'YYYY');
-  else
-    v_year_prefix := pg_catalog.coalesce(pg_catalog.substring(v_year_label, 1, 4), pg_catalog.to_char(pg_catalog.now() at time zone 'Asia/Kolkata', 'YYYY'));
+    raise exception 'Academic year not found or specified for certificate numbering';
   end if;
+
+  v_year_prefix := pg_catalog.coalesce(
+    nullif(pg_catalog.substring(v_year_label from '^([0-9]{4})'), ''),
+    pg_catalog.to_char(pg_catalog.now() at time zone 'Asia/Kolkata', 'YYYY')
+  );
 
   insert into public.receipt_number_counters as c (series_code, academic_year_id, next_value)
   values (p_prefix, v_year_id, 2)
@@ -579,16 +587,18 @@ begin
     select id, label into v_year_id, v_year_label
     from public.academic_years where status = 'current' limit 1;
   else
-    select label into v_year_label
+    select id, label into v_year_id, v_year_label
     from public.academic_years where id = v_year_id;
   end if;
 
   if v_year_id is null then
-    v_year_id := '00000000-0000-0000-0000-000000000000';
-    v_year_prefix := pg_catalog.to_char(pg_catalog.now() at time zone 'Asia/Kolkata', 'YYYY');
-  else
-    v_year_prefix := pg_catalog.coalesce(pg_catalog.substring(v_year_label, 1, 4), pg_catalog.to_char(pg_catalog.now() at time zone 'Asia/Kolkata', 'YYYY'));
+    raise exception 'Academic year not found or specified for admission numbering';
   end if;
+
+  v_year_prefix := pg_catalog.coalesce(
+    nullif(pg_catalog.substring(v_year_label from '^([0-9]{4})'), ''),
+    pg_catalog.to_char(pg_catalog.now() at time zone 'Asia/Kolkata', 'YYYY')
+  );
 
   insert into public.receipt_number_counters as c (series_code, academic_year_id, next_value)
   values (p_prefix, v_year_id, 2)
@@ -600,7 +610,7 @@ begin
 end;
 $$;
 
--- Monotonic Application Number: {N}/{YYYY-YY} (e.g. 1/2026-27) scoped to academic year
+-- Monotonic Application Number: {N}/{YYYY-YY} (e.g. 161/2026-27) scoped to academic year
 create or replace function private.next_application_number(
   p_academic_year_id uuid default null
 )
@@ -612,6 +622,7 @@ as $$
 declare
   v_year_id uuid;
   v_year_label text;
+  v_short_label text;
   n bigint;
 begin
   v_year_id := p_academic_year_id;
@@ -619,13 +630,18 @@ begin
     select id, label into v_year_id, v_year_label
     from public.academic_years where status = 'current' limit 1;
   else
-    select label into v_year_label
+    select id, label into v_year_id, v_year_label
     from public.academic_years where id = v_year_id;
   end if;
 
   if v_year_id is null then
-    v_year_id := '00000000-0000-0000-0000-000000000000';
-    v_year_label := pg_catalog.to_char(pg_catalog.now() at time zone 'Asia/Kolkata', 'YYYY');
+    raise exception 'Academic year not found or specified for application numbering';
+  end if;
+
+  if v_year_label ~ '^([0-9]{4})-([0-9]{4})$' then
+    v_short_label := pg_catalog.substring(v_year_label, 1, 4) || '-' || pg_catalog.substring(v_year_label, 8, 2);
+  else
+    v_short_label := v_year_label;
   end if;
 
   insert into public.receipt_number_counters as c (series_code, academic_year_id, next_value)
@@ -634,7 +650,7 @@ begin
     set next_value = c.next_value + 1, updated_at = pg_catalog.now()
   returning c.next_value - 1 into n;
 
-  return n::text || '/' || v_year_label;
+  return n::text || '/' || v_short_label;
 end;
 $$;
 

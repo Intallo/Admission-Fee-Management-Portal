@@ -344,9 +344,14 @@ join public.receipts r on r.receipt_number=v.individual_number
 join public.payments p on p.id=r.payment_id
 on conflict (consolidated_receipt_id,receipt_id) do nothing;
 
-insert into public.receipt_number_counters (series_code,next_value)
-values ('RCT',13)
-on conflict (series_code) do update set next_value=greatest(public.receipt_number_counters.next_value,excluded.next_value);
+insert into public.receipt_number_counters (series_code, academic_year_id, next_value)
+select 'RCT', ay.id, 13
+from public.academic_years ay
+where ay.label = '2026-2027'
+on conflict (series_code, academic_year_id) do update set next_value=greatest(public.receipt_number_counters.next_value,excluded.next_value);
+
+
+
 
 insert into public.fee_adjustments
 (student_fee_assessment_line_id,adjustment_type,amount,status,reason,requested_by,requested_at,approved_by,approved_at)

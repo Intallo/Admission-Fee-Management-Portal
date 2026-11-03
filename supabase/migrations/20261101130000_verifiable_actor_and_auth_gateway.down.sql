@@ -90,7 +90,11 @@ $$;
 grant execute on function private.current_actor_role() to school_app_user, school_app_login;
 grant execute on function private.current_actor_staff_id() to school_app_user, school_app_login;
 
--- 4. Restore Migration 8 single-argument numbering functions
+-- 4. Restore Migration 8 single-argument numbering functions and counter primary key
+alter table public.receipt_number_counters drop constraint if exists receipt_number_counters_pkey;
+alter table public.receipt_number_counters drop column if exists academic_year_id;
+alter table public.receipt_number_counters add primary key (series_code);
+
 create or replace function private.next_certificate_number(p_prefix text default 'TC')
 returns text
 language plpgsql

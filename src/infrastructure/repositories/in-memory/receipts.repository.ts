@@ -30,6 +30,7 @@ export class InMemoryReceiptsRepository implements IReceiptsRepository {
     this.consolidatedVault.clear();
     this.paymentToReceipt.clear();
     this.receiptSeq = 1;
+    if ((this as any)._receiptSeqsByYear) (this as any)._receiptSeqsByYear.clear();
   }
 
   registerReceipt(receipt: ReceiptDTO): void {
@@ -50,7 +51,12 @@ export class InMemoryReceiptsRepository implements IReceiptsRepository {
     _academicYearId?: string,
     _session?: AuthenticatedUserSession
   ): Promise<ReceiptNumber> {
-    const padded = String(this.receiptSeq++).padStart(6, '0');
+    const key = _academicYearId || '2026';
+    const current = (this as any)._receiptSeqsByYear ? ((this as any)._receiptSeqsByYear.get(key) || 1) : this.receiptSeq++;
+    if (!(this as any)._receiptSeqsByYear) (this as any)._receiptSeqsByYear = new Map();
+    (this as any)._receiptSeqsByYear.set(key, current + 1);
+    this.receiptSeq = current + 1;
+    const padded = String(current).padStart(6, '0');
     return `RCT-2026-${padded}` as ReceiptNumber;
   }
 

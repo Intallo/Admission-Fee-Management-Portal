@@ -151,6 +151,16 @@ describe('CTO Directive Phase 8.2: Real PostgreSQL Integration Test Suite', () =
           }
 
           // receipt_number_counters
+                    if (trimmed.includes('private.next_application_number')) {
+            const yearId = params[0];
+            const yearObj = dbTables.academic_years.find((y) => y.id === yearId);
+            const rawLabel = yearObj ? yearObj.label : '2026-2027';
+            const label = rawLabel.length === 9 && rawLabel.includes('-') ? `${rawLabel.slice(0, 4)}-${rawLabel.slice(-2)}` : rawLabel;
+            const key = `APP-${yearId || 'default'}`;
+            const nextVal = (dbCounters.get(key) || 1);
+            dbCounters.set(key, nextVal + 1);
+            return { rows: [{ val: `${nextVal}/${label}` }], rowCount: 1 };
+          }
           if (trimmed.includes('receipt_number_counters as c')) {
             const series = params[0] || 'APP';
             const val = dbCounters.get(series) || 1;

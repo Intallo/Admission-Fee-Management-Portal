@@ -22,19 +22,36 @@ import { formatInr } from '../../../lib/money/inr';
 export class PostgresCertificatesRepository implements ICertificatesRepository {
   async getNextCertificateNumber(
     prefix?: string,
-    session?: AuthenticatedUserSession,
+    academicYearIdOrSession?: string | AuthenticatedUserSession,
+    sessionOrClient?: AuthenticatedUserSession | PoolClient,
     existingClient?: PoolClient
   ): Promise<string> {
+    let academicYearId: string | undefined;
+    let session: AuthenticatedUserSession | undefined;
+    let clientToUse: PoolClient | undefined;
+
+    if (typeof academicYearIdOrSession === 'string') {
+      academicYearId = academicYearIdOrSession;
+      session = sessionOrClient as AuthenticatedUserSession | undefined;
+      clientToUse = existingClient;
+    } else {
+      session = academicYearIdOrSession as AuthenticatedUserSession | undefined;
+      clientToUse = sessionOrClient as PoolClient | undefined;
+    }
+
     if (!session || !session.staffId) {
       throw new AuthorizationError('Authenticated user session is required for certificate operations.');
     }
     const runInTx = async (client: any) => {
-      const numRes = await client.query(`select private.next_certificate_number($1) as num`, [prefix || 'TC']);
+      const numRes = await client.query(
+        `select private.next_certificate_number($1, $2) as num`,
+        [prefix || 'TC', academicYearId || null]
+      );
       return numRes.rows[0].num;
     };
 
-    if (existingClient) {
-      return runInTx(existingClient);
+    if (clientToUse) {
+      return runInTx(clientToUse);
     }
     return withTransaction(session, runInTx);
   }
@@ -293,13 +310,9 @@ export class PostgresCertificatesRepository implements ICertificatesRepository {
         return this.mapCertificateRow(updated.rows[0], client);
       }
 
-      // 1. Allocate Monotonic TC Number: TC-YYYY-NNNN (4 digits)
-      const numRes = await client.query(`select private.next_certificate_number('TC') as num`);
-      const tcNumber = numRes.rows[0].num as CertificateNumber;
-
-      // 2. Fetch full student record to build snapshot
+      // 1. Fetch full student record to build snapshot and extract academic_year_id
       const recRes = await client.query(
-        `select r.id, r.admission_number, r.admission_date,
+        `select r.id, r.admission_number, r.admission_date, r.academic_year_id,
                 s.first_name, s.last_name, s.dob, s.gender, s.nationality, s.mother_tongue,
                 s.caste, s.sts_number, s.dise_number,
                 g.name as grade_name, sec.name as section_name, y.label as year_label
@@ -312,6 +325,13 @@ export class PostgresCertificatesRepository implements ICertificatesRepository {
         [cert.student_academic_record_id]
       );
       const rec = recRes.rows[0];
+
+      // 2. Allocate Monotonic TC Number: TC-YYYY-NNNN (4 digits) scoped to academic year
+      const numRes = await client.query(
+        `select private.next_certificate_number('TC', $1) as num`,
+        [rec.academic_year_id]
+      );
+      const tcNumber = numRes.rows[0].num as CertificateNumber;
 
       const snapshot = {
         certificateNumber: tcNumber,

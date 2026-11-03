@@ -1,4 +1,5 @@
 import { IFeesLedgerRepository } from '../interfaces';
+import { PoolClient } from 'pg';
 import { withTransaction } from '../../db/postgres-pool';
 import { AuthenticatedUserSession } from '../../../modules/identity-access/types';
 import { FeeCategory } from '../../../modules/fee-configuration/types';
@@ -71,7 +72,8 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
   async getStudentDuesSummary(
     studentAcademicRecordId: string,
     _academicYearId?: string,
-    session?: AuthenticatedUserSession
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<StudentFeeSummaryDTO> {
     if (!session || !session.staffId) {
       throw new AuthorizationError('Authenticated user session is required for fee operations.');
@@ -174,21 +176,23 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
         netBalanceDueInr: totalRemaining,
         lines: feeHeadSummaries,
       };
-    });
+    }, existingClient);
   }
 
   async recordPayment(
     params: RecordPaymentRequestDTO,
     idempotencyKey?: string,
-    session?: AuthenticatedUserSession
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<RecordPaymentResultDTO> {
-    return this.recordOfflinePayment(params, idempotencyKey, session as any);
+    return this.recordOfflinePayment(params, idempotencyKey, session as any, existingClient);
   }
 
   async recordOfflinePayment(
     params: RecordPaymentRequestDTO,
     idempotencyKey: string | undefined,
-    session: AuthenticatedUserSession
+    session: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<RecordPaymentResultDTO> {
     return withTransaction(session, async (client) => {
       // 1. Role validation (Accountant, Principal, Clerk)
@@ -228,6 +232,15 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
         `select id from public.student_fee_assessments where student_academic_record_id = $1 for update`,
         [params.studentAcademicRecordId]
       );
+
+      const sarRes = await client.query(
+        `select academic_year_id from public.student_academic_records where id = $1`,
+        [params.studentAcademicRecordId]
+      );
+      if (sarRes.rowCount === 0) {
+        throw new NotFoundError(`Student academic record "${params.studentAcademicRecordId}" not found.`);
+      }
+      const academicYearId = sarRes.rows[0].academic_year_id;
 
       // 4. Validate allocations sum equals payment amount with exact money arithmetic
       let allocationSum = formatInr('0.00');
@@ -314,7 +327,7 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
       }
 
       // 9. Atomic Monotonic Receipt Number Allocation via row-locked function: RCT-YYYY-NNNNNN (6 digits)
-      const receiptNumRes = await client.query(`select private.next_receipt_number('RCT') as num`);
+      const receiptNumRes = await client.query(`select private.next_receipt_number('RCT', $1) as num`, [academicYearId]);
       const receiptNumber = receiptNumRes.rows[0].num as ReceiptNumber;
 
       // 10. Insert receipt with rendered snapshot
@@ -352,9 +365,8 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
 
       // 11. Insert immutable audit event
       await client.query(
-        `insert into public.audit_logs (
-           id, actor_staff_id, action, entity_type, entity_id, outcome, reason, created_at
-         ) values ($1, $2, 'PAYMENT_RECORDED', 'payments', $3, 'SUCCESS', $4, $5)`,
+        `insert into public.audit_logs (id, actor_staff_id, action, entity_type, entity_id, outcome, reason, created_at)
+         values ($1, $2, 'PAYMENT_RECORDED', 'payments', $3, 'SUCCESS', $4, $5)`,
         [
           randomUUID(),
           session.staffId,
@@ -383,7 +395,7 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
         receivedAt: nowIso,
         renderedSnapshot: snapshot,
       };
-    });
+    }, existingClient);
   }
 
   async requestAdjustment(
@@ -393,7 +405,8 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
       amount: string;
       reason: string;
     },
-    session: AuthenticatedUserSession
+    session: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<InternalFeeAdjustment> {
     return withTransaction(session, async (client) => {
       const adjId = randomUUID();
@@ -429,12 +442,13 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
         approvedAt: null,
         createdAt: nowIso,
       };
-    });
+    }, existingClient);
   }
 
   async approveFeeAdjustment(
     adjustmentId: string,
-    session: AuthenticatedUserSession
+    session: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<InternalFeeAdjustment> {
     return withTransaction(session, async (client) => {
       if (session.role !== 'principal') {
@@ -484,13 +498,14 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
         approvedAt: nowIso,
         createdAt: adj.created_at,
       };
-    });
+    }, existingClient);
   }
 
   async reversePayment(
     paymentId: string,
     reason: string,
-    session: AuthenticatedUserSession
+    session: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<ReversePaymentResultDTO> {
     return withTransaction(session, async (client) => {
       if (session.role !== 'principal') {
@@ -545,9 +560,8 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
 
       const auditLogId = randomUUID();
       await client.query(
-        `insert into public.audit_logs (
-           id, actor_staff_id, action, entity_type, entity_id, outcome, reason, created_at
-         ) values ($1, $2, 'PAYMENT_REVERSED', 'payments', $3, 'SUCCESS', $4, $5)`,
+        `insert into public.audit_logs (id, actor_staff_id, action, entity_type, entity_id, outcome, reason, created_at)
+         values ($1, $2, 'PAYMENT_REVERSED', 'payments', $3, 'SUCCESS', $4, $5)`,
         [
           auditLogId,
           session.staffId,
@@ -565,10 +579,10 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
         reversedAt: nowIso,
         auditLogId,
       };
-    });
+    }, existingClient);
   }
 
-  async getPaymentById(paymentId: string, session?: AuthenticatedUserSession): Promise<InternalPaymentRecord | undefined> {
+  async getPaymentById(paymentId: string, session?: AuthenticatedUserSession, existingClient?: PoolClient): Promise<InternalPaymentRecord | undefined> {
     if (!session || !session.staffId) {
       throw new AuthorizationError('Authenticated user session is required for fee operations.');
     }
@@ -596,10 +610,10 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
         recordedBy: row.recorded_by,
         createdAt: row.created_at,
       };
-    });
+    }, existingClient);
   }
 
-  async listPaymentsForRecord(studentAcademicRecordId: string, session?: AuthenticatedUserSession): Promise<InternalPaymentRecord[]> {
+  async listPaymentsForRecord(studentAcademicRecordId: string, session?: AuthenticatedUserSession, existingClient?: PoolClient): Promise<InternalPaymentRecord[]> {
     if (!session || !session.staffId) {
       throw new AuthorizationError('Authenticated user session is required for fee operations.');
     }
@@ -625,10 +639,10 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
         recordedBy: row.recorded_by,
         createdAt: row.created_at,
       }));
-    });
+    }, existingClient);
   }
 
-  async getAllAllocations(session?: AuthenticatedUserSession): Promise<InternalPaymentAllocation[]> {
+  async getAllAllocations(session?: AuthenticatedUserSession, existingClient?: PoolClient): Promise<InternalPaymentAllocation[]> {
     if (!session || !session.staffId) {
       throw new AuthorizationError('Authenticated user session is required for fee operations.');
     }
@@ -643,10 +657,10 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
         amount: formatInr(row.amount),
         createdAt: row.created_at,
       }));
-    });
+    }, existingClient);
   }
 
-  async getAllAdjustments(session?: AuthenticatedUserSession): Promise<InternalFeeAdjustment[]> {
+  async getAllAdjustments(session?: AuthenticatedUserSession, existingClient?: PoolClient): Promise<InternalFeeAdjustment[]> {
     if (!session || !session.staffId) {
       throw new AuthorizationError('Authenticated user session is required for fee operations.');
     }
@@ -667,6 +681,6 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
         approvedAt: row.approved_at,
         createdAt: row.created_at,
       }));
-    });
+    }, existingClient);
   }
 }

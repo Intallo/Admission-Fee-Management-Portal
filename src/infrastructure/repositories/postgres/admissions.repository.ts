@@ -40,21 +40,12 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
     session?: AuthenticatedUserSession,
     existingClient?: PoolClient
   ): Promise<string> {
-    const shortLabel = this.formatAcademicYearShort(yearLabel);
-    const seriesCode = `APP-${shortLabel}`;
-
-    const sql = `insert into public.receipt_number_counters as c (series_code, next_value)
-       values ($1, 2)
-       on conflict (series_code) do update
-         set next_value = c.next_value + 1, updated_at = now()
-       returning c.next_value - 1 as val`;
-
+    const sql = `select private.next_application_number($1) as val`;
     const res = existingClient
-      ? await existingClient.query(sql, [seriesCode])
-      : await query(sql, [seriesCode], session);
+      ? await existingClient.query(sql, [academicYearId])
+      : await query(sql, [academicYearId], session);
 
-    const seq = res.rows[0].val;
-    return `${seq}/${shortLabel}`;
+    return res.rows[0].val;
   }
 
   async getNextAdmissionNumber(
@@ -63,10 +54,10 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
     session?: AuthenticatedUserSession,
     existingClient?: PoolClient
   ): Promise<string> {
-    const sql = `select private.next_admission_number('ADM') as val`;
+    const sql = `select private.next_admission_number('ADM', $1) as val`;
     const res = existingClient
-      ? await existingClient.query(sql, [])
-      : await query(sql, [], session);
+      ? await existingClient.query(sql, [academicYearId])
+      : await query(sql, [academicYearId], session);
     return res.rows[0].val;
   }
 
@@ -679,7 +670,10 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
       }
 
       // 5. Monotonic admission number allocation (ADM-YYYY-NNNN) via DB sequence
-      const admissionNumRes = await client.query(`select private.next_admission_number('ADM') as val`);
+      const admissionNumRes = await client.query(
+        `select private.next_admission_number('ADM', $1) as val`,
+        [app.academic_year_id]
+      );
       const admissionNumber = admissionNumRes.rows[0].val;
 
       // 6. Insert student academic record (admitted)
@@ -720,7 +714,10 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
       if ((structRes.rowCount ?? 0) > 0) {
         const structId = structRes.rows[0].id;
         initialAssessmentId = randomUUID();
-        const assessNumRes = await client.query(`select private.next_receipt_number('ASM') as num`);
+        const assessNumRes = await client.query(
+          `select private.next_receipt_number('ASM', $1) as num`,
+          [app.academic_year_id]
+        );
         const assessmentNumber = assessNumRes.rows[0].num;
 
         await client.query(

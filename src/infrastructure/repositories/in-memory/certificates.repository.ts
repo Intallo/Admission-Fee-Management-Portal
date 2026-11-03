@@ -40,10 +40,21 @@ export class InMemoryCertificatesRepository implements ICertificatesRepository {
   resetForTesting(): void {
     this.certificatesVault.clear();
     this.versionsVault.clear();
-    this.tcSeq = 1;
+    this.tcSeq = 1; this.tcSeqsByYear.clear();
   }
 
-  async getNextCertificateNumber(prefix?: string, _session?: AuthenticatedUserSession): Promise<string> {
+    private tcSeqsByYear = new Map<string, number>();
+
+  async getNextCertificateNumber(prefix?: string, academicYearIdOrSession?: string | AuthenticatedUserSession, _session?: AuthenticatedUserSession): Promise<string> {
+    const yearKey = typeof academicYearIdOrSession === 'string' ? academicYearIdOrSession : '2026';
+    const current = this.tcSeqsByYear.get(yearKey) || 1;
+    this.tcSeqsByYear.set(yearKey, current + 1);
+    this.tcSeq = current + 1;
+    const padded = String(current).padStart(4, '0');
+    return `${prefix || 'TC'}-2026-${padded}`;
+  }
+
+  async _legacyGetNextCertificateNumber(prefix?: string, _session?: AuthenticatedUserSession): Promise<string> {
     const padded = String(this.tcSeq++).padStart(4, '0');
     return `${prefix || 'TC'}-2026-${padded}`;
   }
@@ -223,7 +234,7 @@ export class InMemoryCertificatesRepository implements ICertificatesRepository {
       cert.duesOverrideReason = null;
     }
 
-    const tcNumber = (await this.getNextCertificateNumber('TC')) as CertificateNumber;
+    const tcNumber = (await this.getNextCertificateNumber('TC', cert.academicYearId, session)) as CertificateNumber;
     const nowIso = new Date().toISOString();
 
     cert.certificateNumber = tcNumber;
