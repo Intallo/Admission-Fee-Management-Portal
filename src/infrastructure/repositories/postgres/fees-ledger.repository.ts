@@ -1,5 +1,5 @@
 import { IFeesLedgerRepository } from '../interfaces';
-import { withTransaction, query } from '../../db/postgres-pool';
+import { withTransaction } from '../../db/postgres-pool';
 import { AuthenticatedUserSession } from '../../../modules/identity-access/types';
 import { FeeCategory } from '../../../modules/fee-configuration/types';
 import {

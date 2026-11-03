@@ -1,5 +1,6 @@
 import { IStudentRecordsRepository } from '../interfaces';
 import { withTransaction } from '../../db/postgres-pool';
+import { PoolClient } from 'pg';
 import { AuthenticatedUserSession } from '../../../modules/identity-access/types';
 import {
   StudentProfileDTO,
@@ -14,9 +15,10 @@ import { randomUUID } from 'crypto';
 export class PostgresStudentRecordsRepository implements IStudentRecordsRepository {
   async searchStudents(
     filter: StudentSearchFilterDTO,
-    session: AuthenticatedUserSession
+    session: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<{ data: StudentSearchItemDTO[]; total: number }> {
-    return withTransaction(session, async (client) => {
+    const runInTx = async (client: PoolClient) => {
       let querySql = `
         select r.id as record_id, r.admission_number, r.status, r.admission_date,
                r.academic_year_id, y.label as academic_year_label,
@@ -104,11 +106,20 @@ export class PostgresStudentRecordsRepository implements IStudentRecordsReposito
         data: paginated,
         total: items.length,
       };
-    });
+    };
+
+    if (existingClient) {
+      return runInTx(existingClient);
+    }
+    return withTransaction(session, runInTx);
   }
 
-  async getStudentProfile(recordId: string, session: AuthenticatedUserSession): Promise<StudentProfileDTO> {
-    return withTransaction(session, async (client) => {
+  async getStudentProfile(
+    recordId: string,
+    session: AuthenticatedUserSession,
+    existingClient?: PoolClient
+  ): Promise<StudentProfileDTO> {
+    const runInTx = async (client: PoolClient) => {
       const recRes = await client.query(
         `select r.id as record_id, r.admission_number, r.status, r.admission_date,
                 r.academic_year_id, y.label as academic_year_label,
@@ -241,16 +252,22 @@ export class PostgresStudentRecordsRepository implements IStudentRecordsReposito
         receipts: null,
         certificates: [],
       };
-    });
+    };
+
+    if (existingClient) {
+      return runInTx(existingClient);
+    }
+    return withTransaction(session, runInTx);
   }
 
   async updateStudentStatus(
     recordId: string,
     status: any,
     reason: string,
-    session: AuthenticatedUserSession
+    session: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<any> {
-    return withTransaction(session, async (client) => {
+    const runInTx = async (client: PoolClient) => {
       const nowIso = new Date().toISOString();
       const res = await client.query(
         `update public.student_academic_records
@@ -272,12 +289,21 @@ export class PostgresStudentRecordsRepository implements IStudentRecordsReposito
       );
 
       return res.rows[0];
-    });
+    };
+
+    if (existingClient) {
+      return runInTx(existingClient);
+    }
+    return withTransaction(session, runInTx);
   }
 
-  async getStatusHistory(recordId: string, session?: AuthenticatedUserSession): Promise<any[]> {
+  async getStatusHistory(
+    recordId: string,
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
+  ): Promise<any[]> {
     if (!session) return [];
-    return withTransaction(session, async (client) => {
+    const runInTx = async (client: PoolClient) => {
       const res = await client.query(
         `select action, actor_staff_id, outcome, reason, created_at
          from public.audit_logs
@@ -286,6 +312,11 @@ export class PostgresStudentRecordsRepository implements IStudentRecordsReposito
         [recordId]
       );
       return res.rows;
-    });
+    };
+
+    if (existingClient) {
+      return runInTx(existingClient);
+    }
+    return withTransaction(session, runInTx);
   }
 }
