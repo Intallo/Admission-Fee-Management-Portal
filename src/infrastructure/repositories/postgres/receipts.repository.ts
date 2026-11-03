@@ -15,28 +15,31 @@ import {
 import { randomUUID } from 'crypto';
 import { ReceiptNumber, toDecimalInrString } from '../../../modules/shared/types';
 import { addInr, amountInWordsInr, compareInr, formatInr, subtractInr } from '../../../lib/money/inr';
+import { PoolClient } from 'pg';
 
 export class PostgresReceiptsRepository implements IReceiptsRepository {
   async getNextReceiptNumber(
     series: string,
     academicYearId?: string,
-    session?: AuthenticatedUserSession
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<ReceiptNumber> {
     if (!session || !session.staffId) {
       throw new AuthorizationError('Authenticated user session is required for receipt operations.');
     }
     return withTransaction(session, async (client: any) => {
       const res = await client.query(
-        `select private.next_receipt_number($1) as num`,
-        [series || 'RCT']
+        `select private.next_receipt_number($1, $2) as num`,
+        [series || 'RCT', academicYearId || null]
       );
       return res.rows[0].num as ReceiptNumber;
-    });
+    }, existingClient);
   }
 
   async getReceiptById(
     receiptId: string,
-    session?: AuthenticatedUserSession
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<ReceiptDTO | undefined> {
     if (!session || !session.staffId) {
       throw new AuthorizationError('Authenticated user session is required for receipt operations.');
@@ -66,12 +69,13 @@ export class PostgresReceiptsRepository implements IReceiptsRepository {
         renderedSnapshot: snapshot,
         createdAt: row.created_at,
       };
-    });
+    }, existingClient);
   }
 
   async getReceiptByPaymentId(
     paymentId: string,
-    session?: AuthenticatedUserSession
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<ReceiptDTO | undefined> {
     if (!session || !session.staffId) {
       throw new AuthorizationError('Authenticated user session is required for receipt operations.');
@@ -98,12 +102,13 @@ export class PostgresReceiptsRepository implements IReceiptsRepository {
         renderedSnapshot: snapshot,
         createdAt: row.created_at,
       };
-    });
+    }, existingClient);
   }
 
   async listReceiptsForRecord(
     studentAcademicRecordId: string,
-    session?: AuthenticatedUserSession
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<ReceiptDTO[]> {
     if (!session || !session.staffId) {
       throw new AuthorizationError('Authenticated user session is required for receipt operations.');
@@ -132,12 +137,13 @@ export class PostgresReceiptsRepository implements IReceiptsRepository {
           createdAt: row.created_at,
         };
       });
-    });
+    }, existingClient);
   }
 
   async createReceipt(
     receipt: ReceiptDTO,
-    session?: AuthenticatedUserSession
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<ReceiptDTO> {
     if (!session || !session.staffId) {
       throw new AuthorizationError('Authenticated user session is required for receipt operations.');
@@ -159,13 +165,14 @@ export class PostgresReceiptsRepository implements IReceiptsRepository {
         ]
       );
       return receipt;
-    });
+    }, existingClient);
   }
 
   async issueFinalReceipt(
     studentAcademicRecordId: string,
     notes: string | undefined,
-    session: AuthenticatedUserSession
+    session: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<ConsolidatedReceiptDTO> {
     return withTransaction(session, async (client) => {
       // 1. Fetch student info
@@ -247,8 +254,11 @@ export class PostgresReceiptsRepository implements IReceiptsRepository {
         });
       }
 
-      // 3. Monotonic receipt number: RCT-YYYY-NNNNNN (6 digits)
-      const numRes = await client.query(`select private.next_receipt_number('RCT') as num`);
+      // 3. Monotonic receipt number: RCT-YYYY-NNNNNN (6 digits) scoped to academic year
+      const numRes = await client.query(
+        `select private.next_receipt_number('RCT', $1) as num`,
+        [st.academic_year_id]
+      );
       const finalNumber = numRes.rows[0].num as ReceiptNumber;
 
       const finalId = randomUUID();
@@ -316,13 +326,14 @@ export class PostgresReceiptsRepository implements IReceiptsRepository {
         itemizedPriorReceipts: priorItems,
         createdAt: nowIso,
       };
-    });
+    }, existingClient);
   }
 
   async reprintReceipt(
     receiptId: string,
     reason: string,
-    session: AuthenticatedUserSession
+    session: AuthenticatedUserSession,
+    existingClient?: PoolClient
   ): Promise<{ receipt: ReceiptDTO | ConsolidatedReceiptDTO; isDuplicate: boolean; reprintCount: number }> {
     return withTransaction(session, async (client) => {
       const recRes = await client.query(
@@ -372,6 +383,6 @@ export class PostgresReceiptsRepository implements IReceiptsRepository {
         isDuplicate: true,
         reprintCount: nextCount,
       };
-    });
+    }, existingClient);
   }
 }

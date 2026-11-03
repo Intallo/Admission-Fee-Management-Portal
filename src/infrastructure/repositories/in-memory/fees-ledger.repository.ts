@@ -379,7 +379,7 @@ export class InMemoryFeesLedgerRepository implements IFeesLedgerRepository {
     const receiptId = randomUUID();
     const nowIso = new Date().toISOString();
     const receiptNumber = this.receiptsRepo
-      ? await this.receiptsRepo.getNextReceiptNumber('RCT', undefined, session)
+      ? await this.receiptsRepo.getNextReceiptNumber('RCT', assessment?.academicYearId || (params as any).academicYearId, session)
       : (`RCT-2026-${String(this.receiptSeq++).padStart(6, '0')}` as ReceiptNumber);
 
     const payment: InternalPaymentRecord = {

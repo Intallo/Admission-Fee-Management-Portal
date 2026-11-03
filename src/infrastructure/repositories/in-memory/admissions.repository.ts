@@ -28,17 +28,31 @@ export class InMemoryAdmissionsRepository implements IAdmissionsRepository {
     this.feeAssessmentsVault.clear();
     this.statusHistoryVault.clear();
     this.appSeq = 1;
-    this.admSeq = 1;
+    this.admSeq = 1; (this as any)._appSeqsByYear?.clear(); (this as any)._admSeqsByYear?.clear();
   }
 
   async getNextApplicationNumber(academicYearId: string, yearLabel: string, _session?: AuthenticatedUserSession): Promise<string> {
     const seq = this.appSeq++;
-    return `${seq}/2026-27`;
+    if (!(this as any)._appSeqsByYear) (this as any)._appSeqsByYear = new Map<string, number>();
+    const key = academicYearId || 'default';
+    const current = (this as any)._appSeqsByYear.get(key) || 1;
+    (this as any)._appSeqsByYear.set(key, current + 1);
+    this.appSeq = current + 1;
+    const shortLabel = yearLabel ? (yearLabel.match(/^(\d{4})-(\d{4})$/) ? `${yearLabel.slice(0, 4)}-${yearLabel.slice(-2)}` : yearLabel) : '2026-27';
+    return `${current}/${shortLabel}`;
   }
 
   async getNextAdmissionNumber(academicYearId: string, yearLabel: string, _session?: AuthenticatedUserSession): Promise<string> {
     const seq = String(this.admSeq++).padStart(4, '0');
-    return `ADM-2026-${seq}`;
+    if (!(this as any)._admSeqsByYear) (this as any)._admSeqsByYear = new Map<string, number>();
+    const key = academicYearId || 'default';
+    const current = (this as any)._admSeqsByYear.get(key) || 1;
+    (this as any)._admSeqsByYear.set(key, current + 1);
+    this.admSeq = current + 1;
+    const startYearMatch = yearLabel ? yearLabel.match(/^(\d{4})/) : null;
+    const startYear = startYearMatch ? startYearMatch[1] : '2026';
+    const padded = String(current).padStart(4, '0');
+    return `ADM-${startYear}-${padded}`;
   }
 
   async createDraft(payload: any, session?: AuthenticatedUserSession): Promise<any> {

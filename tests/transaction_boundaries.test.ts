@@ -79,6 +79,9 @@ describe('Milestone M8.3.4: Transaction Boundary and Repository Correctness', ()
           if (trimmed.includes('from public.academic_years where id = $1')) {
             return { rows: [{ id: params[0], label: '2026-2027' }], rowCount: 1 };
           }
+          if (trimmed.includes('private.next_application_number')) {
+            return { rows: [{ val: '1/2026-27' }], rowCount: 1 };
+          }
           if (trimmed.includes('receipt_number_counters as c')) {
             return { rows: [{ val: 1 }], rowCount: 1 };
           }
@@ -527,6 +530,9 @@ describe('Milestone M8.3.4: Transaction Boundary and Repository Correctness', ()
           }
           if (trimmed.includes('from public.academic_years where id = $1')) {
             return { rows: [{ id: 'year-001', label: '2026-2027' }], rowCount: 1 };
+          }
+          if (trimmed.includes('private.next_application_number')) {
+            return { rows: [{ val: '1/2026-27' }], rowCount: 1 };
           }
           if (trimmed.includes('receipt_number_counters as c')) {
             return { rows: [{ val: 1 }], rowCount: 1 };

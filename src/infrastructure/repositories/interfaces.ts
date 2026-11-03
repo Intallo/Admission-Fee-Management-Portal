@@ -141,7 +141,7 @@ export interface IReceiptsRepository {
 }
 
 export interface ICertificatesRepository {
-  getNextCertificateNumber(prefix?: string, session?: AuthenticatedUserSession): Promise<string>;
+  getNextCertificateNumber(prefix?: string, academicYearIdOrSession?: string | AuthenticatedUserSession, session?: AuthenticatedUserSession): Promise<string>;
   prepopulateCertificate(studentAcademicRecordId: string, session?: AuthenticatedUserSession, extra?: any): Promise<any>;
   getCertificateById(certificateId: string, session?: AuthenticatedUserSession): Promise<any>;
   getCertificateByStudentRecordId(studentRecordId: string, session?: AuthenticatedUserSession): Promise<any>;
