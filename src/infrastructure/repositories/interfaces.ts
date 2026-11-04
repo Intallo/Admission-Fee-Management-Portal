@@ -47,6 +47,8 @@ export interface IAdmissionsRepository {
     client?: any
   ): Promise<any>;
   getAcademicRecordById(recordId: string, session?: AuthenticatedUserSession, client?: any): Promise<any>;
+  getAcademicRecordByAdmissionNumber?(admissionNumber: string, session?: AuthenticatedUserSession, client?: any): Promise<any>;
+  listAcademicRecordsForStudent?(studentId: string, session?: AuthenticatedUserSession, client?: any): Promise<any[]>;
   listAcademicRecordsForYear(academicYearId: string, session?: AuthenticatedUserSession, client?: any): Promise<any[]>;
   getAllAcademicRecords(session?: AuthenticatedUserSession, client?: any): Promise<any[]>;
   getStudentById(studentId: string, session?: AuthenticatedUserSession, client?: any): Promise<any>;
@@ -60,10 +62,10 @@ export interface IAdmissionsRepository {
 }
 
 export interface IStudentRecordsRepository {
-  searchStudents(filter: any, session: AuthenticatedUserSession): Promise<{ data: any[]; total: number }>;
-  getStudentProfile(recordId: string, session: AuthenticatedUserSession): Promise<any>;
-  updateStudentStatus(recordId: string, status: any, reason: string, session: AuthenticatedUserSession): Promise<any>;
-  getStatusHistory(recordId: string, session?: AuthenticatedUserSession): Promise<any[]>;
+  searchStudents(filter: any, session: AuthenticatedUserSession, existingClient?: any): Promise<{ data: any[]; total: number }>;
+  getStudentProfile(identifier: string, session: AuthenticatedUserSession, requestedAcademicYearId?: string, existingClient?: any): Promise<any>;
+  updateStudentStatus(recordId: string, status: any, reason: string, session: AuthenticatedUserSession, exitDate?: string, existingClient?: any): Promise<any>;
+  getStatusHistory(recordId: string, session?: AuthenticatedUserSession, existingClient?: any): Promise<any[]>;
   resetForTesting?(): void;
 }
 
@@ -84,7 +86,8 @@ export interface IFeesLedgerRepository {
   getStudentDuesSummary(
     studentAcademicRecordId: string,
     academicYearId?: string,
-    session?: AuthenticatedUserSession
+    session?: AuthenticatedUserSession,
+    existingClient?: any
   ): Promise<any>;
 
   recordOfflinePayment(
@@ -126,7 +129,7 @@ export interface IReceiptsRepository {
   getNextReceiptNumber(series: string, academicYearId?: string, session?: AuthenticatedUserSession): Promise<any>;
   getReceiptById(receiptId: string, session?: AuthenticatedUserSession): Promise<any>;
   getReceiptByPaymentId(paymentId: string, session?: AuthenticatedUserSession): Promise<any>;
-  listReceiptsForRecord(studentAcademicRecordId: string, session?: AuthenticatedUserSession): Promise<any[]>;
+  listReceiptsForRecord(studentAcademicRecordId: string, session?: AuthenticatedUserSession, existingClient?: any): Promise<any[]>;
   createReceipt(receipt: any, session?: AuthenticatedUserSession): Promise<any>;
   issueFinalReceipt(
     studentAcademicRecordId: string,
@@ -145,7 +148,7 @@ export interface ICertificatesRepository {
   getNextCertificateNumber(prefix?: string, academicYearIdOrSession?: string | AuthenticatedUserSession, session?: AuthenticatedUserSession): Promise<string>;
   prepopulateCertificate(studentAcademicRecordId: string, session?: AuthenticatedUserSession, extra?: any): Promise<any>;
   getCertificateById(certificateId: string, session?: AuthenticatedUserSession): Promise<any>;
-  getCertificateByStudentRecordId(studentRecordId: string, session?: AuthenticatedUserSession): Promise<any>;
+  getCertificateByStudentRecordId(studentRecordId: string, session?: AuthenticatedUserSession, existingClient?: any): Promise<any>;
   reviewCertificate(
     certificateId: string,
     payload: any,

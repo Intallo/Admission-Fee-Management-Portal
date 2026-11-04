@@ -54,7 +54,11 @@ export class InMemoryStudentRecordsRepository implements IStudentRecordsReposito
     };
   }
 
-  async getStudentProfile(recordId: string, _session: AuthenticatedUserSession): Promise<StudentProfileDTO> {
+  async getStudentProfile(
+    recordId: string,
+    _session: AuthenticatedUserSession,
+    _requestedAcademicYearId?: string
+  ): Promise<StudentProfileDTO> {
     const found = this.recordsVault.get(recordId);
     if (!found) {
       throw new NotFoundError(`Student record "${recordId}" not found.`);
@@ -66,21 +70,35 @@ export class InMemoryStudentRecordsRepository implements IStudentRecordsReposito
     recordId: string,
     status: any,
     reason: string,
-    _session: AuthenticatedUserSession
+    _session: AuthenticatedUserSession,
+    exitDate?: string
   ): Promise<any> {
     const found = this.recordsVault.get(recordId);
     if (!found) {
       throw new NotFoundError(`Student record "${recordId}" not found.`);
     }
+    const previousStatus = found.status || 'admitted';
     found.status = status;
     const history = this.statusHistoryVault.get(recordId) || [];
     history.push({
+      action: 'STUDENT_STATUS_CHANGED',
+      previousStatus,
+      newStatus: status,
+      effectiveDate: exitDate || new Date().toISOString().split('T')[0],
       status,
       reason,
       changedAt: new Date().toISOString(),
     });
     this.statusHistoryVault.set(recordId, history);
-    return found;
+    return {
+      ...found,
+      previousStatus,
+      newStatus: status,
+      exitDate: exitDate || new Date().toISOString().split('T')[0],
+      exitReason: reason,
+      updatedBy: _session?.staffId,
+      updatedAt: new Date().toISOString(),
+    };
   }
 
   async getStatusHistory(recordId: string, _session?: AuthenticatedUserSession): Promise<any[]> {

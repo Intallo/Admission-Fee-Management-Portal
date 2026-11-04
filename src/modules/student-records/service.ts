@@ -81,6 +81,7 @@ export class StudentRecordsService {
     filter: StudentSearchFilterDTO,
     session: AuthenticatedUserSession
   ): Promise<{ data: StudentSearchItemDTO[]; total: number }> {
+
     if (this.isPostgres()) {
       return await this.repo.searchStudents(filter, session);
     }
@@ -91,6 +92,7 @@ export class StudentRecordsService {
     filter: StudentSearchFilterDTO,
     session: AuthenticatedUserSession
   ): Promise<{ data: StudentSearchItemDTO[]; total: number }> {
+
     const targetYearId = filter.academicYearId || session.activeAcademicYearId;
     const academicYears = await academicYearsService.listAcademicYears();
     const yearMap = new Map(academicYears.map((y) => [y.id, y.label]));
@@ -183,7 +185,7 @@ export class StudentRecordsService {
     session: AuthenticatedUserSession
   ): Promise<StudentProfileDTO> {
     if (this.isPostgres()) {
-      return await this.repo.getStudentProfile(identifier, session);
+      return await this.repo.getStudentProfile(identifier, session, requestedAcademicYearId);
     }
     return this._inMemoryGetStudentProfile(identifier, requestedAcademicYearId, session);
   }
@@ -385,16 +387,22 @@ export class StudentRecordsService {
       if (!payload.exitReason || payload.exitReason.trim().length < 3) {
         throw new ValidationError('exitReason is mandatory and must be at least 3 characters.');
       }
-      const updated = await this.repo.updateStudentStatus(payload.academicRecordId, payload.newStatus, payload.exitReason.trim(), session);
+      const updated = await this.repo.updateStudentStatus(
+        payload.academicRecordId,
+        payload.newStatus,
+        payload.exitReason.trim(),
+        session,
+        payload.exitDate
+      );
       return {
         academicRecordId: updated.id,
         studentId: updated.student_id,
-        previousStatus: 'admitted',
+        previousStatus: updated.previousStatus,
         newStatus: payload.newStatus,
         exitDate: payload.exitDate,
         exitReason: payload.exitReason.trim(),
         updatedBy: session.staffId,
-        updatedAt: new Date().toISOString(),
+        updatedAt: updated.updatedAt || new Date().toISOString(),
       };
     }
     return this._inMemoryMarkStudentStatus(identifier, payload, session);
