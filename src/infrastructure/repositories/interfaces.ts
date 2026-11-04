@@ -170,10 +170,13 @@ export interface ICertificatesRepository {
 
 export interface IDocumentsRepository {
   listDocumentTypes(session?: AuthenticatedUserSession, client?: any): Promise<any[]>;
-  listRequirements(gradeLevelId?: string, session?: AuthenticatedUserSession, client?: any): Promise<any[]>;
+  listRequirements(academicYearId?: string, gradeLevelId?: string | null, session?: AuthenticatedUserSession, client?: any): Promise<any[]>;
+  getDocumentTypeById?(id: string, session?: AuthenticatedUserSession, client?: any): Promise<any>;
   saveDocument(doc: any, session?: AuthenticatedUserSession, client?: any): Promise<any>;
   getDocumentById(documentId: string, session?: AuthenticatedUserSession, client?: any): Promise<any>;
   listDocumentsForApplication(applicationId: string, session?: AuthenticatedUserSession, client?: any): Promise<any[]>;
+  listDocumentsForStudent?(studentId: string, session?: AuthenticatedUserSession, client?: any): Promise<any[]>;
+  getDocumentVersions?(documentId: string, session?: AuthenticatedUserSession, client?: any): Promise<any[]>;
   verifyDocument(documentId: string, status: string, reason?: string, session?: AuthenticatedUserSession, client?: any): Promise<any>;
   resetForTesting?(): void;
 }
