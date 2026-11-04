@@ -92,9 +92,10 @@ export class CertificatesService {
   }
 
   async listCertificatesForRecord(
-    studentAcademicRecordId: string
+    studentAcademicRecordId: string,
+    session?: AuthenticatedUserSession
   ): Promise<Array<{ id: string; certificateType: 'LC' | 'TC'; certificateNumber: string | null; status: 'draft' | 'issued' | 'cancelled'; reviewStatus?: 'pending' | 'reviewed' | 'returned'; issuedAt: string | null }>> {
-    const cert = await this.repo.getCertificateByStudentRecordId(studentAcademicRecordId);
+    const cert = await this.repo.getCertificateByStudentRecordId(studentAcademicRecordId, session);
     if (!cert) return [];
 
     return [
