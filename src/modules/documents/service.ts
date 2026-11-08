@@ -6,6 +6,7 @@ import {
   ApplicationChecklistDTO,
   DocumentChecklistItemDTO,
   PresignedDownloadUrlResponseDTO,
+  DocumentVerificationStatus,
 } from './types';
 import { AuthenticatedUserSession } from '../identity-access/types';
 import { AuthorizationError, BusinessRuleError, NotFoundError, ValidationError } from '../../lib/errors';
@@ -14,94 +15,11 @@ import { logger } from '../../lib/logger';
 import { IDocumentsRepository } from '../../infrastructure/repositories/interfaces';
 import { getRepositories } from '../../infrastructure/repositories/registry';
 import { PostgresDocumentsRepository } from '../../infrastructure/repositories/postgres/documents.repository';
-import { getAdminDbClient } from '../../infrastructure/db/supabase-admin';
-import crypto from 'crypto';
+import { getAdminDbClient, resetAdminDbClient } from '../../infrastructure/db/supabase-admin';
 
 // 5 MB max file size per SRS A-16 / PRIV-DOC-PDF-001
 export const MAX_DOCUMENT_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 export const ALLOWED_MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/png'];
-
-// In-memory vaults for synthetic data & unit testing
-const documentTypesVault: DocumentTypeDTO[] = [
-  {
-    id: '10000000-0000-0000-0000-000000000001',
-    code: 'BIRTH_CERTIFICATE',
-    name: 'Birth Certificate',
-    description: 'Mandatory proof of date of birth.',
-    mimeTypeAllowed: ALLOWED_MIME_TYPES,
-    maxFileSizeBytes: MAX_DOCUMENT_FILE_SIZE_BYTES,
-  },
-  {
-    id: '10000000-0000-0000-0000-000000000002',
-    code: 'STUDENT_PHOTOGRAPH',
-    name: 'Student Photograph',
-    description: 'Recent passport-size photograph.',
-    mimeTypeAllowed: ['image/jpeg', 'image/png'],
-    maxFileSizeBytes: MAX_DOCUMENT_FILE_SIZE_BYTES,
-  },
-  {
-    id: '10000000-0000-0000-0000-000000000003',
-    code: 'PARENT_ID_PROOF',
-    name: 'Parent/Guardian ID Proof',
-    description: 'Aadhaar, Voter ID, or Passport of primary guardian.',
-    mimeTypeAllowed: ALLOWED_MIME_TYPES,
-    maxFileSizeBytes: MAX_DOCUMENT_FILE_SIZE_BYTES,
-  },
-  {
-    id: '10000000-0000-0000-0000-000000000004',
-    code: 'PREVIOUS_SCHOOL_TC',
-    name: 'Previous School Transfer Certificate',
-    description: 'Required for Grade 1 and above.',
-    mimeTypeAllowed: ALLOWED_MIME_TYPES,
-    maxFileSizeBytes: MAX_DOCUMENT_FILE_SIZE_BYTES,
-  },
-  {
-    id: '10000000-0000-0000-0000-000000000005',
-    code: 'PREVIOUS_MARKSHEET',
-    name: 'Previous School Marksheet',
-    description: 'Academic marks card from prior recognized institution.',
-    mimeTypeAllowed: ALLOWED_MIME_TYPES,
-    maxFileSizeBytes: MAX_DOCUMENT_FILE_SIZE_BYTES,
-  },
-];
-
-const documentRequirementsVault: DocumentRequirementDTO[] = [
-  {
-    id: '20000000-0000-0000-0000-000000000001',
-    academicYearId: '00000000-0000-0000-0000-000000000001',
-    gradeLevelId: null,
-    documentTypeId: '10000000-0000-0000-0000-000000000001',
-    documentTypeCode: 'BIRTH_CERTIFICATE',
-    documentTypeName: 'Birth Certificate',
-    isRequired: true,
-    appliesToNewAdmission: true,
-    notes: 'Mandatory for all new admissions.',
-  },
-  {
-    id: '20000000-0000-0000-0000-000000000002',
-    academicYearId: '00000000-0000-0000-0000-000000000001',
-    gradeLevelId: null,
-    documentTypeId: '10000000-0000-0000-0000-000000000002',
-    documentTypeCode: 'STUDENT_PHOTOGRAPH',
-    documentTypeName: 'Student Photograph',
-    isRequired: true,
-    appliesToNewAdmission: true,
-    notes: 'Mandatory photo on student profile.',
-  },
-  {
-    id: '20000000-0000-0000-0000-000000000003',
-    academicYearId: '00000000-0000-0000-0000-000000000001',
-    gradeLevelId: null,
-    documentTypeId: '10000000-0000-0000-0000-000000000003',
-    documentTypeCode: 'PARENT_ID_PROOF',
-    documentTypeName: 'Parent/Guardian ID Proof',
-    isRequired: false,
-    appliesToNewAdmission: true,
-    notes: 'Optional supporting identity proof.',
-  },
-];
-
-const studentDocumentsVault = new Map<string, StudentDocumentDTO>();
 
 export class DocumentsService {
   private customRepo?: IDocumentsRepository;
@@ -122,46 +40,47 @@ export class DocumentsService {
   }
 
   /**
-   * Resets in-memory document state for isolated tests.
+   * Resets document state for isolated tests.
    */
   resetForTesting(): void {
-    studentDocumentsVault.clear();
+    resetAdminDbClient();
     if (this.repo.resetForTesting) {
       this.repo.resetForTesting();
     }
   }
 
   /**
-   * Lists active document types.
+   * Lists active document types from the repository.
    */
-  async listDocumentTypes(): Promise<DocumentTypeDTO[]> {
-    return [...documentTypesVault];
+  async listDocumentTypes(actorSession?: AuthenticatedUserSession): Promise<DocumentTypeDTO[]> {
+    return this.repo.listDocumentTypes(actorSession);
   }
 
   /**
-   * Lists requirements for an academic year and optional grade level.
+   * Lists requirements for an academic year and optional grade level from the repository.
    */
-  async listRequirements(academicYearId: string, gradeLevelId?: string | null): Promise<DocumentRequirementDTO[]> {
-    return documentRequirementsVault.filter(
-      (r) =>
-        r.academicYearId === academicYearId &&
-        (r.gradeLevelId === null || !gradeLevelId || r.gradeLevelId === gradeLevelId)
-    );
+  async listRequirements(
+    academicYearId: string,
+    gradeLevelId?: string | null,
+    actorSession?: AuthenticatedUserSession
+  ): Promise<DocumentRequirementDTO[]> {
+    return this.repo.listRequirements(academicYearId, gradeLevelId, actorSession);
   }
 
   /**
    * Generates a missing-document checklist for an admission application (US-11).
+   * Fully backed by durable repository queries.
    */
   async getApplicationChecklist(
     applicationId: string,
     academicYearId: string,
-    gradeLevelId: string
+    gradeLevelId: string,
+    actorSession?: AuthenticatedUserSession
   ): Promise<ApplicationChecklistDTO> {
-    const requirements = await this.listRequirements(academicYearId, gradeLevelId);
+    const requirements = await this.listRequirements(academicYearId, gradeLevelId, actorSession);
+    const allDocs = await this.repo.listDocumentsForApplication(applicationId, actorSession);
 
-    const activeDocs = Array.from(studentDocumentsVault.values()).filter(
-      (doc) => doc.admissionApplicationId === applicationId && doc.verificationStatus !== 'replaced'
-    );
+    const activeDocs = allDocs.filter((doc) => doc.verificationStatus !== 'replaced');
 
     let totalReceived = 0;
     let missingMandatoryCount = 0;
@@ -175,9 +94,7 @@ export class DocumentsService {
         missingMandatoryCount++;
       }
 
-      const allForType = Array.from(studentDocumentsVault.values()).filter(
-        (d) => d.admissionApplicationId === applicationId && d.documentTypeId === req.documentTypeId
-      );
+      const allForType = allDocs.filter((d) => d.documentTypeId === req.documentTypeId);
 
       return {
         documentTypeId: req.documentTypeId,
@@ -206,7 +123,8 @@ export class DocumentsService {
   }
 
   /**
-   * Uploads an admission document with strict MIME/size validation and version preservation.
+   * Uploads an admission document with strict MIME/size validation, storage upload,
+   * rollback on failure, and version preservation.
    * Authorized: Principal and Admission Officer (or Clerk during draft intake).
    */
   async uploadDocument(
@@ -223,116 +141,122 @@ export class DocumentsService {
   ): Promise<StudentDocumentDTO> {
     enforcePolicy(actorSession.role, 'documents:upload');
 
+    if (!params.fileName || params.fileName.trim() === '') {
+      throw new ValidationError('Document file name is required.');
+    }
+
     if (!ALLOWED_MIME_TYPES.includes(params.mimeType.toLowerCase())) {
       throw new ValidationError(
         `Invalid document format: "${params.mimeType}". Only PDF, JPG, and PNG files are accepted.`
       );
     }
 
-    if (params.fileSizeBytes > MAX_DOCUMENT_FILE_SIZE_BYTES) {
+    if (params.fileSizeBytes <= 0 || params.fileSizeBytes > MAX_DOCUMENT_FILE_SIZE_BYTES) {
       throw new ValidationError(
         `File size exceeds 5 MB limit. Provided file is ${(params.fileSizeBytes / (1024 * 1024)).toFixed(2)} MB.`
       );
     }
 
-    const docType = documentTypesVault.find((t) => t.id === params.documentTypeId);
+    const docTypes = await this.repo.listDocumentTypes(actorSession);
+    const docType = docTypes.find((t) => t.id === params.documentTypeId);
     if (!docType) {
       throw new NotFoundError(`Document type with ID "${params.documentTypeId}" not found.`);
     }
 
-    const existingActive = Array.from(studentDocumentsVault.values()).find(
-      (d) =>
-        d.admissionApplicationId === params.admissionApplicationId &&
-        d.documentTypeId === params.documentTypeId &&
-        d.verificationStatus !== 'replaced'
-    );
+    if (docType.mimeTypeAllowed && !docType.mimeTypeAllowed.map((m: string) => m.toLowerCase()).includes(params.mimeType.toLowerCase())) {
+      throw new ValidationError(
+        `Invalid document format: "${params.mimeType}". Document type "${docType.name}" only allows ${docType.mimeTypeAllowed.join(', ')}.`
+      );
+    }
 
-    let replacesDocumentId: string | null = null;
-    let versionNumber = 1;
-
-    if (existingActive) {
-      existingActive.verificationStatus = 'replaced';
-      replacesDocumentId = existingActive.id;
-      versionNumber = existingActive.versionNumber + 1;
+    if (docType.maxFileSizeBytes && params.fileSizeBytes > docType.maxFileSizeBytes) {
+      throw new ValidationError(
+        `File size exceeds limit for "${docType.name}". Limit is ${(docType.maxFileSizeBytes / (1024 * 1024)).toFixed(2)} MB.`
+      );
     }
 
     const newDocId = randomUUID();
-    const nowIso = new Date().toISOString();
+    const storageBucket = 'admission-documents';
     const storagePath = `applications/${params.admissionApplicationId}/${newDocId}-${params.fileName}`;
 
-    const newDoc: StudentDocumentDTO = {
-      id: newDocId,
-      studentId: params.studentId,
-      admissionApplicationId: params.admissionApplicationId,
-      documentTypeId: params.documentTypeId,
-      documentTypeName: docType.name,
-      documentTypeCode: docType.code,
-      fileName: params.fileName,
-      fileSizeBytes: params.fileSizeBytes,
-      mimeType: params.mimeType,
-      storageBucket: 'admission-documents',
-      storagePath,
-      verificationStatus: 'pending',
-      replacesDocumentId,
-      versionNumber,
-      uploadedBy: actorSession.staffId,
-      uploadedAt: nowIso,
-      reviewedBy: null,
-      reviewedAt: null,
-      rejectionReason: null,
-    };
-
-    if (this.isPostgres()) {
-      let uploadedToStorage = false;
-      if (params.fileBuffer) {
-        try {
-          const adminDb = getAdminDbClient();
-          const { error } = await adminDb.storage
-            .from('admission-documents')
-            .upload(storagePath, params.fileBuffer, { contentType: params.mimeType, upsert: true });
-          if (!error) uploadedToStorage = true;
-        } catch {
-          // Continue if storage is in mock/test mode
-        }
-      }
-
+    let uploadedToStorage = false;
+    if (params.fileBuffer) {
       try {
-        await this.repo.saveDocument(newDoc, actorSession);
-      } catch (saveError) {
-        if (uploadedToStorage) {
-          try {
-            const adminDb = getAdminDbClient();
-            await adminDb.storage.from('admission-documents').remove([storagePath]);
-          } catch {
-            // Ignore storage rollback error
-          }
+        const adminDb = getAdminDbClient();
+        const { error } = await adminDb.storage
+          .from(storageBucket)
+          .upload(storagePath, params.fileBuffer, { contentType: params.mimeType, upsert: false });
+
+        if (error) {
+          throw new BusinessRuleError(`Failed to upload document binary to private storage: ${error.message}`);
         }
-        throw saveError;
-      }
-    } else {
-      studentDocumentsVault.set(newDocId, newDoc);
-      try {
-        await this.repo.saveDocument(newDoc, actorSession);
-      } catch {
-        // Local/unit-test fallback
+        uploadedToStorage = true;
+      } catch (storageErr: any) {
+        if (storageErr instanceof BusinessRuleError) {
+          throw storageErr;
+        }
+        throw new BusinessRuleError(`Storage service unavailable: ${storageErr?.message || 'Upload connection failed'}`);
       }
     }
 
+    let savedDoc: StudentDocumentDTO;
+    try {
+      savedDoc = await this.repo.saveDocument(
+        {
+          id: newDocId,
+          studentId: params.studentId,
+          admissionApplicationId: params.admissionApplicationId,
+          documentTypeId: params.documentTypeId,
+          documentTypeName: docType.name,
+          documentTypeCode: docType.code,
+          fileName: params.fileName,
+          fileSizeBytes: params.fileSizeBytes,
+          mimeType: params.mimeType,
+          storageBucket,
+          storagePath,
+          verificationStatus: 'pending',
+          uploadedBy: actorSession.staffId,
+        },
+        actorSession
+      );
+    } catch (saveError) {
+      // Task 10: Delete uploaded binary data if metadata persistence fails
+      if (uploadedToStorage) {
+        try {
+          const adminDb = getAdminDbClient();
+          await adminDb.storage.from(storageBucket).remove([storagePath]);
+        } catch (cleanupErr) {
+          logger.error('Failed to cleanup orphaned storage file after metadata failure', {
+            storagePath,
+            error: cleanupErr,
+          });
+        }
+      }
+      throw saveError;
+    }
+
     logger.info('Student admission document uploaded', {
-      documentId: newDocId,
+      documentId: savedDoc.id,
       applicationId: params.admissionApplicationId,
       documentTypeCode: docType.code,
-      versionNumber,
-      replacesDocumentId,
+      versionNumber: savedDoc.versionNumber,
+      replacesDocumentId: savedDoc.replacesDocumentId,
       actorStaffId: actorSession.staffId,
     });
 
-    return newDoc;
+    return savedDoc;
   }
 
+  /**
+   * Generates a real signed download URL from private storage.
+   * Authorized: Principal and Admission Officer only.
+   * Denied to Accountant and System Administrator.
+   * Never falls back to fake synthetic URLs.
+   */
   async generateDownloadUrl(
     documentId: string,
-    actorSession: AuthenticatedUserSession
+    actorSession: AuthenticatedUserSession,
+    expectedScope?: { applicationId?: string; studentId?: string }
   ): Promise<PresignedDownloadUrlResponseDTO> {
     if (actorSession.role !== 'principal' && actorSession.role !== 'admission_officer') {
       throw new AuthorizationError(
@@ -340,14 +264,17 @@ export class DocumentsService {
       );
     }
 
-    let doc: StudentDocumentDTO | undefined;
-    if (this.isPostgres()) {
-      doc = await this.repo.getDocumentById(documentId, actorSession);
-    } else {
-      doc = studentDocumentsVault.get(documentId);
-    }
+    const doc = await this.repo.getDocumentById(documentId, actorSession);
     if (!doc) {
       throw new NotFoundError(`Document with ID "${documentId}" not found.`);
+    }
+
+    // Task 13: Validate cross-student and cross-application access
+    if (expectedScope?.applicationId && doc.admissionApplicationId && doc.admissionApplicationId !== expectedScope.applicationId) {
+      throw new AuthorizationError('Access Denied: Document does not belong to the requested admission application.');
+    }
+    if (expectedScope?.studentId && doc.studentId !== expectedScope.studentId) {
+      throw new AuthorizationError('Access Denied: Document does not belong to the requested student.');
     }
 
     const expiresInSeconds = 900; // Exactly 15 minutes (SRS PRIV-DOC-PDF-001)
@@ -361,44 +288,45 @@ export class DocumentsService {
       expiresInSeconds,
     });
 
-    let downloadUrl: string | null = null;
+    const adminDb = getAdminDbClient();
+    let result: any;
     try {
-      const adminDb = getAdminDbClient();
-      const { data, error } = await adminDb.storage
+      result = await adminDb.storage
         .from(doc.storageBucket || 'admission-documents')
         .createSignedUrl(doc.storagePath, expiresInSeconds);
-      if (!error && data?.signedUrl) {
-        downloadUrl = data.signedUrl;
-      }
-    } catch {
-      // offline / mock fallback
+    } catch (err: any) {
+      throw new BusinessRuleError(`Storage service unavailable: ${err?.message || 'Storage signing request failed'}`);
     }
 
-    if (!downloadUrl) {
-      const expiresAt = Math.floor(Date.now() / 1000) + expiresInSeconds;
-      const signature = crypto
-        .createHmac('sha256', (() => {
-          const secret = process.env.ACTOR_SIGNING_SECRET;
-          if (!secret || secret.trim() === '') {
-            throw new Error('[SECURITY ERROR] ACTOR_SIGNING_SECRET is not configured. Protected document token generation requires an explicit signing secret.');
-          }
-          if (secret.length < 32) {
-            throw new Error('[SECURITY ERROR] ACTOR_SIGNING_SECRET must be at least 32 characters long for cryptographic security.');
-          }
-          return secret;
-        })())
-        .update(`${doc.id}:${expiresAt}`)
-        .digest('hex');
-      downloadUrl = `https://storage.school.internal/admission-documents/${doc.storagePath}?token=${signature}&expires=${expiresAt}`;
+    if (result.error || !result.data?.signedUrl) {
+      throw new BusinessRuleError(
+        `Failed to generate signed download URL: ${result.error?.message || 'Storage signing failed.'}`
+      );
     }
 
     return {
-      downloadUrl,
+      downloadUrl: result.data.signedUrl,
       fileName: doc.fileName,
       expiresInSeconds,
     };
   }
 
+  /**
+   * Retrieves single document metadata by ID.
+   */
+  async getDocumentById(
+    documentId: string,
+    actorSession: AuthenticatedUserSession
+  ): Promise<StudentDocumentDTO> {
+    if (actorSession.role !== 'principal' && actorSession.role !== 'admission_officer') {
+      throw new AuthorizationError('Access Denied: Only Principal and Admission Officers may view document details.');
+    }
+    return this.repo.getDocumentById(documentId, actorSession);
+  }
+
+  /**
+   * Lists application documents with role protection.
+   */
   async listApplicationDocuments(
     applicationId: string,
     actorSession: AuthenticatedUserSession,
@@ -407,35 +335,14 @@ export class DocumentsService {
     if (actorSession.role !== 'principal' && actorSession.role !== 'admission_officer') {
       throw new AuthorizationError('Access Denied: Only Principal and Admission Officers may view application documents.');
     }
-    if (this.isPostgres()) {
-      const docs = await this.repo.listDocumentsForApplication(applicationId, actorSession);
-      if (includeReplaced) return docs;
-      return docs.filter((d) => d.verificationStatus !== 'replaced');
-    }
-    return this._memListAppDocs(applicationId, actorSession, includeReplaced);
+    const docs = await this.repo.listDocumentsForApplication(applicationId, actorSession);
+    if (includeReplaced) return docs;
+    return docs.filter((d) => d.verificationStatus !== 'replaced');
   }
 
-  private async _memListAppDocs(
-    applicationId: string,
-    actorSession: AuthenticatedUserSession,
-    includeReplaced = false
-  ): Promise<StudentDocumentDTO[]> {
-    if (actorSession.role !== 'principal' && actorSession.role !== 'admission_officer') {
-      throw new AuthorizationError('Access Denied: Only Principal and Admission Officers may view application documents.');
-    }
-
-
-
-    const all = Array.from(studentDocumentsVault.values()).filter(
-      (d) => d.admissionApplicationId === applicationId
-    );
-
-    if (includeReplaced) {
-      return all;
-    }
-    return all.filter((d) => d.verificationStatus !== 'replaced');
-  }
-
+  /**
+   * Lists student documents with role protection.
+   */
   async listDocumentsForStudent(
     studentId: string,
     actorSession: AuthenticatedUserSession,
@@ -444,25 +351,17 @@ export class DocumentsService {
     if (actorSession.role !== 'principal' && actorSession.role !== 'admission_officer') {
       throw new AuthorizationError('Access Denied: Only Principal and Admission Officers may view student documents.');
     }
+    const docs = this.repo.listDocumentsForStudent
+      ? await this.repo.listDocumentsForStudent(studentId, actorSession)
+      : await this.repo.listDocumentsForApplication(studentId, actorSession);
 
-
-
-    if (this.isPostgres()) {
-      const docs = await this.repo.listDocumentsForApplication(studentId, actorSession);
-      if (includeReplaced) return docs;
-      return docs.filter((d) => d.verificationStatus !== 'replaced');
-    }
-
-    const all = Array.from(studentDocumentsVault.values()).filter(
-      (d) => d.studentId === studentId
-    );
-
-    if (includeReplaced) {
-      return all;
-    }
-    return all.filter((d) => d.verificationStatus !== 'replaced');
+    if (includeReplaced) return docs;
+    return docs.filter((d) => d.verificationStatus !== 'replaced');
   }
 
+  /**
+   * Retrieves complete version history for a document.
+   */
   async getDocumentVersions(
     documentId: string,
     actorSession: AuthenticatedUserSession
@@ -471,24 +370,27 @@ export class DocumentsService {
       throw new AuthorizationError('Access Denied: Only Principal and Admission Officers may view document version history.');
     }
 
-    const currentDoc = studentDocumentsVault.get(documentId);
-    if (!currentDoc) {
-      throw new NotFoundError(`Document with ID "${documentId}" not found.`);
+    if (this.repo.getDocumentVersions) {
+      return this.repo.getDocumentVersions(documentId, actorSession);
     }
 
-    const versions: StudentDocumentDTO[] = [currentDoc];
-    let prevId = currentDoc.replacesDocumentId;
-    while (prevId) {
-      const prevDoc = studentDocumentsVault.get(prevId);
-      if (prevDoc) {
-        versions.push(prevDoc);
-        prevId = prevDoc.replacesDocumentId;
-      } else {
-        break;
-      }
-    }
+    const currentDoc = await this.repo.getDocumentById(documentId, actorSession);
+    return [currentDoc];
+  }
 
-    return versions.sort((a, b) => b.versionNumber - a.versionNumber);
+  /**
+   * Verifies or rejects an uploaded document.
+   */
+  async verifyDocument(
+    documentId: string,
+    status: DocumentVerificationStatus,
+    reason?: string,
+    actorSession?: AuthenticatedUserSession
+  ): Promise<StudentDocumentDTO> {
+    if (actorSession && actorSession.role !== 'principal' && actorSession.role !== 'admission_officer') {
+      throw new AuthorizationError('Access Denied: Only Principal and Admission Officers may verify documents.');
+    }
+    return this.repo.verifyDocument(documentId, status, reason, actorSession);
   }
 }
 
