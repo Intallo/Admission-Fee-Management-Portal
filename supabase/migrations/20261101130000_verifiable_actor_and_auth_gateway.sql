@@ -508,7 +508,7 @@ begin
   end if;
 
   v_year_prefix := pg_catalog.coalesce(
-    nullif(pg_catalog.substring(v_year_label from '^([0-9]{4})'), ''),
+    nullif(pg_catalog.substr(v_year_label, 1, 4), ''),
     pg_catalog.to_char(pg_catalog.now() at time zone 'Asia/Kolkata', 'YYYY')
   );
 
@@ -552,7 +552,7 @@ begin
   end if;
 
   v_year_prefix := pg_catalog.coalesce(
-    nullif(pg_catalog.substring(v_year_label from '^([0-9]{4})'), ''),
+    nullif(pg_catalog.substr(v_year_label, 1, 4), ''),
     pg_catalog.to_char(pg_catalog.now() at time zone 'Asia/Kolkata', 'YYYY')
   );
 
@@ -596,7 +596,7 @@ begin
   end if;
 
   v_year_prefix := pg_catalog.coalesce(
-    nullif(pg_catalog.substring(v_year_label from '^([0-9]{4})'), ''),
+    nullif(pg_catalog.substr(v_year_label, 1, 4), ''),
     pg_catalog.to_char(pg_catalog.now() at time zone 'Asia/Kolkata', 'YYYY')
   );
 
