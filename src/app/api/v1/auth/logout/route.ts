@@ -1,11 +1,60 @@
 import { NextResponse } from 'next/server';
-import { SESSION_COOKIE_NAME } from '../../../../../lib/auth/token';
+import { cookies } from 'next/headers';
+import { SESSION_COOKIE_NAME, verifySessionToken } from '../../../../../lib/auth/token';
 import { getOrCreateCorrelationId } from '../../../../../lib/correlation';
+import { getRepositories } from '../../../../../infrastructure/repositories';
+import { logger } from '../../../../../lib/logger';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   const correlationId = getOrCreateCorrelationId(request.headers);
+
+  // Extract session token from cookie store, request cookie header, or bearer token
+  let token: string | undefined;
+  try {
+    const cookieStore = cookies();
+    token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  } catch {
+    // cookies() may throw in environments without RequestContext
+  }
+
+  if (!token) {
+    const cookieHeader = request.headers.get('cookie') || '';
+    const match = cookieHeader.match(new RegExp('(?:^|;\\s*)' + SESSION_COOKIE_NAME + '=([^;]*)'));
+    if (match) {
+      token = decodeURIComponent(match[1]);
+    }
+  }
+
+  if (!token) {
+    const authHeader = request.headers.get('authorization');
+    if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
+      token = authHeader.slice(7).trim();
+    }
+  }
+
+  if (token) {
+    try {
+      const verification = verifySessionToken(token);
+      if (verification.valid) {
+        await getRepositories().identity.revokeSession(
+          verification.session.sessionId,
+          verification.session.expiresAt
+        );
+        logger.info('Session successfully revoked on logout', {
+          sessionId: verification.session.sessionId,
+          staffId: verification.session.staffId,
+          correlationId,
+        });
+      }
+    } catch (error) {
+      logger.warn('Failed to record server-side session revocation during logout', {
+        error: String(error),
+        correlationId,
+      });
+    }
+  }
 
   const response = NextResponse.json(
     { success: true, message: 'Logged out successfully.' },
