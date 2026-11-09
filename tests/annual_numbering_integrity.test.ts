@@ -107,6 +107,12 @@ describe('Milestone M8.3.5 — Academic-Year Numbering Integrity', () => {
       }
     });
 
+    it('verifies migration 9 does not contain invalid schema-qualified substring from syntax', () => {
+      const sql = fs.readFileSync(MIGRATION_9_PATH, 'utf-8');
+      expect(sql).not.toMatch(/pg_catalog\.substring\s*\([^)]*\bfrom\b/i);
+      expect(sql).toContain('pg_catalog.substr(v_year_label, 1, 4)');
+    });
+
     it('verifies seed.sql supplies academic_year_id and uses composite conflict target', () => {
       const seedSql = fs.readFileSync(SEED_SQL_PATH, 'utf-8');
       expect(seedSql).toContain('insert into public.receipt_number_counters (series_code, academic_year_id, next_value)');
