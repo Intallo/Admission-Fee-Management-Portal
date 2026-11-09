@@ -4,6 +4,8 @@ export interface IIdentityRepository {
   getStaffByEmail(email: string): Promise<any | null>;
   getStaffById(staffId: string): Promise<any | null>;
   getSecurityProfile(staffId: string, email?: string, session?: AuthenticatedUserSession): Promise<any | null>;
+  isSessionRevoked(sessionId: string): Promise<boolean>;
+  revokeSession(sessionId: string, expiresAt: number): Promise<void>;
   recordLoginAttempt(staffId: string, success: boolean, lockedUntil?: number | null, session?: AuthenticatedUserSession): Promise<void>;
   updatePassword(staffId: string, passwordHash: string, mustChangePassword: boolean, session?: AuthenticatedUserSession): Promise<void>;
   listStaff(session?: AuthenticatedUserSession): Promise<any[]>;

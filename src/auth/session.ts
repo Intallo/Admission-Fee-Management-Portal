@@ -27,6 +27,26 @@ export async function getServerSession(): Promise<AuthenticatedUserSession | nul
 
     const sessionPayload = verification.session;
 
+    // Server-side session revocation verification (prevents re-use of copied tokens post-logout)
+    try {
+      const isRevoked = await getRepositories().identity.isSessionRevoked(sessionPayload.sessionId);
+      if (isRevoked) {
+        logger.warn('Session rejected: session has been revoked', {
+          sessionId: sessionPayload.sessionId,
+          staffId: sessionPayload.staffId,
+        });
+        return null;
+      }
+    } catch (revocationError) {
+      if (process.env.NODE_ENV === 'production' || process.env.PERSISTENCE_MODE === 'postgres') {
+        logger.error('Session revocation check failed closed in production environment', {
+          error: String(revocationError),
+          staffId: sessionPayload.staffId,
+        });
+        return null;
+      }
+    }
+
     // Active staff lookup & verification: verify staff account is not deactivated
     let isActive = sessionPayload.isActive;
     let actualRole = sessionPayload.role;

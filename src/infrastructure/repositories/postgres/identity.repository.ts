@@ -83,6 +83,29 @@ export class PostgresIdentityRepository implements IIdentityRepository {
     return withSystemTransaction(executeQuery, existingClient);
   }
 
+  async isSessionRevoked(sessionId: string): Promise<boolean> {
+    if (!sessionId) return true;
+    return withSystemTransaction(async (client) => {
+      const res = await client.query(
+        `select private.is_session_revoked($1) as revoked`,
+        [sessionId]
+      );
+      return Boolean(res.rows[0]?.revoked);
+    });
+  }
+
+  async revokeSession(sessionId: string, expiresAt: number): Promise<void> {
+    if (!sessionId || !Number.isFinite(expiresAt)) {
+      throw new Error('A valid session ID and expiry are required for session revocation.');
+    }
+    await withSystemTransaction(async (client) => {
+      await client.query(
+        `select private.revoke_session($1, $2::timestamptz)`,
+        [sessionId, new Date(expiresAt).toISOString()]
+      );
+    });
+  }
+
   async recordLoginAttempt(
     staffId: string,
     success: boolean,

@@ -70,6 +70,14 @@ export class IdentityService {
     this.repo.resetForTesting?.();
   }
 
+  async isSessionRevoked(sessionId: string): Promise<boolean> {
+    return this.repo.isSessionRevoked(sessionId);
+  }
+
+  async revokeSession(sessionId: string, expiresAt: number): Promise<void> {
+    return this.repo.revokeSession(sessionId, expiresAt);
+  }
+
   /**
    * Authenticates staff user credentials with 5-attempt/15-minute lockout enforcement.
    * Guarantees that browser-supplied roles or IDs cannot override trusted session identity.

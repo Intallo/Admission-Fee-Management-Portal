@@ -16,10 +16,28 @@ export interface InMemorySecurityProfile {
 export class InMemoryIdentityRepository implements IIdentityRepository {
   private staffVault = new Map<string, StaffMemberDTO>();
   private securityProfiles = new Map<string, InMemorySecurityProfile>();
+  private revokedSessions = new Map<string, number>();
 
   resetForTesting(): void {
     this.staffVault.clear();
     this.securityProfiles.clear();
+    this.revokedSessions.clear();
+  }
+
+  async isSessionRevoked(sessionId: string): Promise<boolean> {
+    if (!sessionId) return true;
+    const expiresAt = this.revokedSessions.get(sessionId);
+    if (expiresAt === undefined) return false;
+    if (expiresAt <= Date.now()) {
+      this.revokedSessions.delete(sessionId);
+      return false;
+    }
+    return true;
+  }
+
+  async revokeSession(sessionId: string, expiresAt: number): Promise<void> {
+    if (!sessionId || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) return;
+    this.revokedSessions.set(sessionId, expiresAt);
   }
 
   async getStaffByEmail(email: string): Promise<any | null> {
