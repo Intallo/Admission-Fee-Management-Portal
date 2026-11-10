@@ -58,6 +58,16 @@ begin
     grant authenticated to authenticator;
     grant service_role to authenticator;
   end if;
+
+  -- Ensure postgres role inherits app roles for test compatibility
+  if exists (select from pg_roles where rolname = 'postgres') then
+    if exists (select from pg_roles where rolname = 'school_app_user') then
+      grant school_app_user to postgres;
+    end if;
+    if exists (select from pg_roles where rolname = 'school_app_login') then
+      grant school_app_login to postgres;
+    end if;
+  end if;
 end
 $$;
 

@@ -21,7 +21,7 @@ describe('Milestone M8.3.3: Authentication Gateway Security', () => {
   const downMigrationPath = path.join(
     repoRoot,
     'supabase',
-    'migrations',
+    'rollbacks',
     '20261101130000_verifiable_actor_and_auth_gateway.down.sql'
   );
   const adr002Path = path.join(

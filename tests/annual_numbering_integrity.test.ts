@@ -26,7 +26,7 @@ vi.mock('../src/infrastructure/db/postgres-pool', async () => {
 });
 
 const MIGRATION_9_PATH = path.resolve(__dirname, '../supabase/migrations/20261101130000_verifiable_actor_and_auth_gateway.sql');
-const DOWN_MIGRATION_9_PATH = path.resolve(__dirname, '../supabase/migrations/20261101130000_verifiable_actor_and_auth_gateway.down.sql');
+const DOWN_MIGRATION_9_PATH = path.resolve(__dirname, '../supabase/rollbacks/20261101130000_verifiable_actor_and_auth_gateway.down.sql');
 const SEED_SQL_PATH = path.resolve(__dirname, '../supabase/seed.sql');
 
 describe('Milestone M8.3.5 — Academic-Year Numbering Integrity', () => {

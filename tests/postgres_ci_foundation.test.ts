@@ -221,6 +221,26 @@ describe('Milestone M8.3.1: PostgreSQL CI Foundation & Migration Verification', 
       expect(fs.existsSync(bootstrapPath)).toBe(true);
     });
 
+    it('ensures supabase/migrations contains strictly forward migrations and zero .down.sql rollback files for supabase db reset compatibility', () => {
+      const migrationsDir = path.join(repoRoot, 'supabase', 'migrations');
+      const migrationFiles = fs.readdirSync(migrationsDir);
+      const downFiles = migrationFiles.filter((file) => file.endsWith('.down.sql'));
+
+      // Native supabase db reset discovers all *.sql in supabase/migrations and fails on .down.sql
+      expect(downFiles).toEqual([]);
+    });
+
+    it('verifies that two-way rollback scripts are preserved in supabase/rollbacks', () => {
+      const rollbacksDir = path.join(repoRoot, 'supabase', 'rollbacks');
+      expect(fs.existsSync(rollbacksDir)).toBe(true);
+
+      const rollbackFiles = fs.readdirSync(rollbacksDir);
+      expect(rollbackFiles.length).toBeGreaterThanOrEqual(5);
+      for (const file of rollbackFiles) {
+        expect(file.endsWith('.down.sql')).toBe(true);
+      }
+    });
+
     it('verifies fail-closed production guard in the test bootstrap SQL', () => {
       const bootstrapSql = fs.readFileSync(bootstrapPath, 'utf-8');
 
