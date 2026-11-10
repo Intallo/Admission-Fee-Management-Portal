@@ -59,9 +59,15 @@ describe('Milestone M8.3.1: PostgreSQL CI Foundation & Migration Verification', 
       const storageIdx = filenames.findIndex((f) => f.includes('provision_private_storage_buckets'));
       expect(storageIdx).toBeGreaterThan(-1);
 
-      // Invariant 5: Verifiable actor and auth gateway is the latest security pass
+      // Invariant 5: Verifiable actor and auth gateway comes after login role
       const gatewayIdx = filenames.findIndex((f) => f.includes('verifiable_actor_and_auth_gateway'));
-      expect(gatewayIdx).toBe(filenames.length - 1);
+      expect(gatewayIdx).toBeGreaterThan(loginRoleIdx);
+
+      // Invariant 6: Session revocation persistence follows auth gateway
+      const revocationIdx = filenames.findIndex((f) => f.includes('persist_session_revocation'));
+      if (revocationIdx > -1) {
+        expect(revocationIdx).toBeGreaterThan(gatewayIdx);
+      }
     });
 
     it('verifies all forward migration files exist and are non-empty', () => {
