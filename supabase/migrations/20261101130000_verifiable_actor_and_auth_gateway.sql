@@ -95,7 +95,12 @@ begin
     return null;
   end if;
 
-  v_expected_signature := pg_catalog.encode(public.hmac((v_staff_id::text || ':' || v_db_role)::bytea, v_secret::bytea, 'sha256'), 'hex');
+  -- Under search_path = '', resolve hmac from extensions (Supabase) or public (standard PG)
+  begin
+    v_expected_signature := pg_catalog.encode(extensions.hmac((v_staff_id::text || ':' || v_db_role)::bytea, v_secret::bytea, 'sha256'), 'hex');
+  exception when undefined_function then
+    v_expected_signature := pg_catalog.encode(public.hmac((v_staff_id::text || ':' || v_db_role)::bytea, v_secret::bytea, 'sha256'), 'hex');
+  end;
 
   if lower(v_signature) <> lower(v_expected_signature) then
     return null; -- Invalid signature: forged identity rejected

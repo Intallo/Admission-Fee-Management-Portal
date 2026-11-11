@@ -48,6 +48,24 @@ export async function initializeDemoCredentials(repo?: IIdentityRepository): Pro
         mustChangePassword: acc.mustChange,
         isActive: true,
       }, bootstrapSession);
+    } else {
+      // Check if existing demo staff has missing or invalid demo password hash
+      const secProfile = await repository.getSecurityProfile(existing.id, acc.email);
+      const isPasswordValid = secProfile?.passwordHash
+        ? await verifyPassword(DEFAULT_DEMO_PASSWORD, secProfile.passwordHash)
+        : false;
+
+      // Only auto-heal if account has never logged in or customized their password, and hash is invalid
+      if (!secProfile || (!isPasswordValid && !secProfile.lastLoginAt)) {
+        if (repository.ensureSecurityProfile) {
+          await repository.ensureSecurityProfile(
+            existing.id,
+            defaultHash,
+            acc.mustChange,
+            bootstrapSession
+          );
+        }
+      }
     }
   }
 

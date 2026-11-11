@@ -41,7 +41,7 @@ revoke delete on public.staff_security_profiles from school_app_user;
 -- Hash generated using scrypt with cost N=16384, r=8, p=1
 insert into public.staff_security_profiles (staff_id, password_hash, must_change_password)
 select sm.id,
-       'scrypt$16384$8$1$669229e612cb7c7f4659b8b0e77d70c5$5bb7cb8d58c8ec6b51bf150a417066f1e582855f7c3e551c6e1fc1634b8bc7359556be8775a2fa3c3d52697ef678b871c53e839e1ff54c1beec6d396a8fa00ef',
+       'scrypt$16384$8$1$2b5c4d6dde398b0bf4670cb892ca6caf$ed8ee9d504f41d5925f48af8789655e2e9ff0151c6e21421264e2773a962c100433428607dd4ac3dab2f35c2918c6fd96719c3bfa891f7ad2801862df5e626eb',
        case when sm.email = 'system.admin@school-demo.example' then true else false end
 from public.staff_members sm
 where not exists (
