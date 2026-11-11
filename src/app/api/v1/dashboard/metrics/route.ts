@@ -11,13 +11,14 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
 
   try {
-    // Only school operational staff have access to the dashboard; SYSADMIN is restricted
+    // Allow school staff and system administrators to view dashboard metrics (ROLE_PERMISSION_MATRIX.md US-39)
     const session = await requireRole([
       'principal',
       'accountant',
       'admission_officer',
       'clerk',
       'read_only',
+      'system_admin',
     ]);
 
     const academicYearId = searchParams.get('academicYearId') || undefined;

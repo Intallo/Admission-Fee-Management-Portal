@@ -62,9 +62,10 @@ describe('Role-Based Policy Enforcement (AUTHORIZATION_MATRIX.md)', () => {
   });
 
   describe('System Administrator Permissions', () => {
-    it('grants user account management and audit views', () => {
+    it('grants user account management, audit views, and dashboard metrics', () => {
       expect(hasPermission('system_admin', 'users:manage_accounts')).toBe(true);
       expect(hasPermission('system_admin', 'audit:view_logs')).toBe(true);
+      expect(hasPermission('system_admin', 'dashboard:view_metrics')).toBe(true);
     });
 
     it('denies access to sensitive PII and business decisions', () => {

@@ -84,9 +84,10 @@ describe('Centralized RBAC Enforcement (AUTHORIZATION_MATRIX.md)', () => {
   });
 
   describe('System Administrator Authority (Technical Staff Management)', () => {
-    it('permits technical staff directory operations and audit log inspection', () => {
+    it('permits technical staff directory operations, audit log inspection, and aggregate dashboard metrics', () => {
       expect(hasPermission('system_admin', 'users:manage_accounts')).toBe(true);
       expect(hasPermission('system_admin', 'audit:view_logs')).toBe(true);
+      expect(hasPermission('system_admin', 'dashboard:view_metrics')).toBe(true);
     });
 
     it('strictly forbids business admissions, financial policy, payments, and certificates', () => {

@@ -78,6 +78,7 @@ const ROLE_PERMISSIONS: Record<StaffRole, Set<PolicyAction>> = {
   system_admin: new Set([
     'users:manage_accounts',
     'audit:view_logs',
+    'dashboard:view_metrics',
   ]),
   read_only: new Set([
     'fees:view_dues',

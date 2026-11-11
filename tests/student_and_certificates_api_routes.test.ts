@@ -299,11 +299,14 @@ describe('Phase 6: Student Records, Certificates, Audit & Dashboard API Routes',
       expect(body.financials).toBeDefined();
     });
 
-    it('GET /api/v1/dashboard/metrics - denies System Administrator', async () => {
+    it('GET /api/v1/dashboard/metrics - returns operational metrics for System Administrator without financials', async () => {
       currentMockSession.role = 'system_admin';
       const req = new Request('http://localhost/api/v1/dashboard/metrics');
       const res = await getDashboardMetricsRoute(req);
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.academicYearId).toBe(currentYearId);
+      expect(body.financials).toBeUndefined();
     });
   });
 });

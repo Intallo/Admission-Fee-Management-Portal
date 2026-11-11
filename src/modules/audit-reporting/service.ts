@@ -10,6 +10,7 @@ import { AuthenticatedUserSession, StaffRole } from '../identity-access/types';
 import {
   AuthorizationError,
   BusinessRuleError,
+  NotFoundError,
 } from '../../lib/errors';
 import { enforcePolicy } from '../../policy/guards';
 import { logger } from '../../lib/logger';
@@ -19,6 +20,7 @@ import { PostgresAuditRepository } from '../../infrastructure/repositories/postg
 import { maskAadhaar, maskBankAccount } from '../../lib/crypto/pii';
 import { admissionsService } from '../admissions/service';
 import { academicYearsService } from '../academic-years/service';
+import { AcademicYearDTO } from '../academic-years/types';
 import { feesLedgerService } from '../fees-ledger/service';
 import { certificatesService } from '../certificates-lctc/service';
 import { addInr } from '../../lib/money/inr';
@@ -285,8 +287,26 @@ export class AuditReportingService {
   ): Promise<DashboardMetricsDTO> {
     enforcePolicy(session.role, 'dashboard:view_metrics');
 
-    const targetYearId = academicYearId || session.activeAcademicYearId;
-    const year = await academicYearsService.getAcademicYearById(targetYearId);
+    let targetYearId = academicYearId || session.activeAcademicYearId;
+    let year: AcademicYearDTO;
+
+    try {
+      year = await academicYearsService.getAcademicYearById(targetYearId, session);
+    } catch (err) {
+      if (err instanceof NotFoundError && !academicYearId) {
+        // Fallback to active current academic year if session activeAcademicYearId does not exist in store
+        const allYears = await academicYearsService.listAcademicYears(session);
+        const currentYear = allYears.find((y) => y.status === 'current') || allYears[0];
+        if (currentYear) {
+          year = currentYear;
+          targetYearId = currentYear.id;
+        } else {
+          throw err;
+        }
+      } else {
+        throw err;
+      }
+    }
 
     // 1. Admission Applications Breakdown
     const allApps = admissionsService.isPostgres()
