@@ -144,31 +144,31 @@ If a migration must be reverted, apply the corresponding `.down.sql` script in r
 
 ### 4.1 Reverting Migration 9 (`verifiable_actor_and_auth_gateway`)
 ```powershell
-psql -h <DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/migrations/20261101130000_verifiable_actor_and_auth_gateway.down.sql
+psql -h <DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/rollbacks/20261101130000_verifiable_actor_and_auth_gateway.down.sql
 ```
 *Effect:* Safely drops all 6 auth gateway functions in `private` (`auth_create_security_profile`, `auth_update_password`, `auth_record_login_attempt`, `auth_get_security_profile`, `auth_lookup_staff_by_id`, `auth_lookup_staff_by_email`), re-grants base table permissions on `staff_security_profiles` expected by Migration 8, restores Migration 8 unverified actor context functions, drops `private.system_secrets`, and reverts `receipt_number_counters` composite key.
 
 ### 4.2 Reverting Migration 8 (`provision_school_app_login_and_rls`)
 ```powershell
-psql -h <DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/migrations/20261101120000_provision_school_app_login_and_rls.down.sql
+psql -h <DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/rollbacks/20261101120000_provision_school_app_login_and_rls.down.sql
 ```
 *Effect:* Safely drops `school_app_login` role, RLS policies, and actor context helper functions.
 
 ### 4.3 Reverting Migration 7 (`provision_private_storage_buckets`)
 ```powershell
-psql -h <DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/migrations/20261101000000_provision_private_storage_buckets.down.sql
+psql -h <DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/rollbacks/20261101000000_provision_private_storage_buckets.down.sql
 ```
 *Effect:* Safely drops private storage buckets and bucket RLS policies.
 
 ### 4.4 Reverting Migration 6 (`staff_auth_security`)
 ```powershell
-psql -h <DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/migrations/20261031000000_staff_auth_security.down.sql
+psql -h <DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/rollbacks/20261031000000_staff_auth_security.down.sql
 ```
 *Effect:* Safely drops `public.staff_security_profiles` table and triggers.
 
 ### 4.5 Reverting Migration 5 (`provision_restricted_app_role`)
 ```powershell
-psql -h <DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/migrations/20261030000000_provision_restricted_app_role.down.sql
+psql -h <DB_HOST> -p 5432 -U postgres -d <DB_NAME> -f supabase/rollbacks/20261030000000_provision_restricted_app_role.down.sql
 ```
 *Effect:* Restores 4-digit receipt numbering and revokes role privileges for `school_app_user`.
 

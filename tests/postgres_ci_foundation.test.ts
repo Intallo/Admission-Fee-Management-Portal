@@ -59,9 +59,15 @@ describe('Milestone M8.3.1: PostgreSQL CI Foundation & Migration Verification', 
       const storageIdx = filenames.findIndex((f) => f.includes('provision_private_storage_buckets'));
       expect(storageIdx).toBeGreaterThan(-1);
 
-      // Invariant 5: Verifiable actor and auth gateway is the latest security pass
+      // Invariant 5: Verifiable actor and auth gateway comes after login role
       const gatewayIdx = filenames.findIndex((f) => f.includes('verifiable_actor_and_auth_gateway'));
-      expect(gatewayIdx).toBe(filenames.length - 1);
+      expect(gatewayIdx).toBeGreaterThan(loginRoleIdx);
+
+      // Invariant 6: Session revocation persistence follows auth gateway
+      const revocationIdx = filenames.findIndex((f) => f.includes('persist_session_revocation'));
+      if (revocationIdx > -1) {
+        expect(revocationIdx).toBeGreaterThan(gatewayIdx);
+      }
     });
 
     it('verifies all forward migration files exist and are non-empty', () => {
@@ -213,6 +219,26 @@ describe('Milestone M8.3.1: PostgreSQL CI Foundation & Migration Verification', 
       // Verify bootstrap is located in scripts/ci
       expect(bootstrapPath).toContain(path.join('scripts', 'ci'));
       expect(fs.existsSync(bootstrapPath)).toBe(true);
+    });
+
+    it('ensures supabase/migrations contains strictly forward migrations and zero .down.sql rollback files for supabase db reset compatibility', () => {
+      const migrationsDir = path.join(repoRoot, 'supabase', 'migrations');
+      const migrationFiles = fs.readdirSync(migrationsDir);
+      const downFiles = migrationFiles.filter((file) => file.endsWith('.down.sql'));
+
+      // Native supabase db reset discovers all *.sql in supabase/migrations and fails on .down.sql
+      expect(downFiles).toEqual([]);
+    });
+
+    it('verifies that two-way rollback scripts are preserved in supabase/rollbacks', () => {
+      const rollbacksDir = path.join(repoRoot, 'supabase', 'rollbacks');
+      expect(fs.existsSync(rollbacksDir)).toBe(true);
+
+      const rollbackFiles = fs.readdirSync(rollbacksDir);
+      expect(rollbackFiles.length).toBeGreaterThanOrEqual(5);
+      for (const file of rollbackFiles) {
+        expect(file.endsWith('.down.sql')).toBe(true);
+      }
     });
 
     it('verifies fail-closed production guard in the test bootstrap SQL', () => {

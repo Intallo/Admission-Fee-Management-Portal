@@ -445,7 +445,7 @@ describe('Milestone M8.3.2: HMAC Secret Provisioning and Actor Verification', ()
     const downMigration9Path = path.join(
       repoRoot,
       'supabase',
-      'migrations',
+      'rollbacks',
       '20261101130000_verifiable_actor_and_auth_gateway.down.sql'
     );
     const runbookPath = path.join(repoRoot, 'docs', 'DATABASE_MIGRATION_RUNBOOK.md');

@@ -23,6 +23,17 @@ $$;
 grant school_app_user to school_app_login;
 grant connect on database postgres to school_app_login;
 
+-- Ensure developer and administrative database connections inherit app roles
+do $$
+begin
+  if exists (select from pg_roles where rolname = 'postgres') then
+    grant school_app_user to postgres;
+    grant school_app_login to postgres;
+    grant usage on schema private to postgres;
+  end if;
+end
+$$;
+
 -- Set default search path
 alter role school_app_login set search_path = public, private;
 alter role school_app_user set search_path = public, private;

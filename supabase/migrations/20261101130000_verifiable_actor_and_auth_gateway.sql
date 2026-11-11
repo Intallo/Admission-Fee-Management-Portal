@@ -149,14 +149,18 @@ security definer
 set search_path = ''
 as $$
 begin
-  if p_email is null or pg_catalog.trim(p_email) = '' then
+  if p_email is null or pg_catalog.btrim(p_email) = '' then
     return;
   end if;
 
   return query
-  select s.id, s.auth_user_id, s.email, s.full_name, s.role::text, s.is_active, s.active_academic_year_id
+  select s.id, s.auth_user_id, s.email, s.full_name, s.role::text, s.is_active,
+         coalesce(
+           (select ay.id from public.academic_years ay where ay.status = 'current' limit 1),
+           (select ay.id from public.academic_years ay order by ay.start_date desc limit 1)
+         ) as active_academic_year_id
   from public.staff_members s
-  where pg_catalog.lower(s.email) = pg_catalog.lower(pg_catalog.trim(p_email))
+  where pg_catalog.lower(s.email) = pg_catalog.lower(pg_catalog.btrim(p_email))
   limit 1;
 end;
 $$;
@@ -182,7 +186,11 @@ begin
   end if;
 
   return query
-  select s.id, s.auth_user_id, s.email, s.full_name, s.role::text, s.is_active, s.active_academic_year_id
+  select s.id, s.auth_user_id, s.email, s.full_name, s.role::text, s.is_active,
+         coalesce(
+           (select ay.id from public.academic_years ay where ay.status = 'current' limit 1),
+           (select ay.id from public.academic_years ay order by ay.start_date desc limit 1)
+         ) as active_academic_year_id
   from public.staff_members s
   where s.id = p_staff_id
   limit 1;
@@ -236,14 +244,14 @@ begin
 
   -- Case 2: Unauthenticated connection (e.g. login credentials lookup)
   -- MUST supply matching active email to prevent arbitrary staff ID credential enumeration
-  if p_email is not null and pg_catalog.trim(p_email) <> '' then
+  if p_email is not null and pg_catalog.btrim(p_email) <> '' then
     return query
     select p.staff_id, p.password_hash, p.must_change_password,
            p.failed_login_attempts, p.locked_until, p.last_login_at
     from public.staff_security_profiles p
     join public.staff_members s on s.id = p.staff_id
     where p.staff_id = p_staff_id
-      and pg_catalog.lower(s.email) = pg_catalog.lower(pg_catalog.trim(p_email))
+      and pg_catalog.lower(s.email) = pg_catalog.lower(pg_catalog.btrim(p_email))
       and s.is_active is true
     limit 1;
     return;
@@ -301,7 +309,7 @@ begin
     where staff_id = p_staff_id;
   else
     -- Failed login attempt: increment counter and enforce 5-failure / 15-minute lockout rule (US-01 AC3)
-    select pg_catalog.coalesce(failed_login_attempts, 0)
+    select coalesce(failed_login_attempts, 0)
     into v_current_failed
     from public.staff_security_profiles
     where staff_id = p_staff_id;
@@ -507,7 +515,7 @@ begin
     raise exception 'Academic year not found or specified for receipt numbering';
   end if;
 
-  v_year_prefix := pg_catalog.coalesce(
+  v_year_prefix := coalesce(
     nullif(pg_catalog.substr(v_year_label, 1, 4), ''),
     pg_catalog.to_char(pg_catalog.now() at time zone 'Asia/Kolkata', 'YYYY')
   );
@@ -551,7 +559,7 @@ begin
     raise exception 'Academic year not found or specified for certificate numbering';
   end if;
 
-  v_year_prefix := pg_catalog.coalesce(
+  v_year_prefix := coalesce(
     nullif(pg_catalog.substr(v_year_label, 1, 4), ''),
     pg_catalog.to_char(pg_catalog.now() at time zone 'Asia/Kolkata', 'YYYY')
   );
@@ -595,7 +603,7 @@ begin
     raise exception 'Academic year not found or specified for admission numbering';
   end if;
 
-  v_year_prefix := pg_catalog.coalesce(
+  v_year_prefix := coalesce(
     nullif(pg_catalog.substr(v_year_label, 1, 4), ''),
     pg_catalog.to_char(pg_catalog.now() at time zone 'Asia/Kolkata', 'YYYY')
   );
@@ -663,3 +671,29 @@ grant execute on function private.next_receipt_number(text, uuid) to school_app_
 grant execute on function private.next_certificate_number(text, uuid) to school_app_user, school_app_login;
 grant execute on function private.next_admission_number(text, uuid) to school_app_user, school_app_login;
 grant execute on function private.next_application_number(uuid) to school_app_user, school_app_login;
+
+-- 6. Developer & Local Environment Compatibility Grants
+-- Ensures local developer connection role (postgres) has membership in app roles and gateway access
+do $$
+begin
+  if exists (select from pg_roles where rolname = 'postgres') then
+    grant school_app_user, school_app_login to postgres;
+    grant usage on schema private to postgres;
+
+    grant execute on function private.current_actor_role() to postgres;
+    grant execute on function private.current_actor_staff_id() to postgres;
+
+    grant execute on function private.auth_lookup_staff_by_email(text) to postgres;
+    grant execute on function private.auth_lookup_staff_by_id(uuid) to postgres;
+    grant execute on function private.auth_get_security_profile(uuid, text) to postgres;
+    grant execute on function private.auth_record_login_attempt(uuid, boolean, timestamptz) to postgres;
+    grant execute on function private.auth_update_password(uuid, text, boolean) to postgres;
+    grant execute on function private.auth_create_security_profile(uuid, text, boolean) to postgres;
+
+    grant execute on function private.next_receipt_number(text, uuid) to postgres;
+    grant execute on function private.next_certificate_number(text, uuid) to postgres;
+    grant execute on function private.next_admission_number(text, uuid) to postgres;
+    grant execute on function private.next_application_number(uuid) to postgres;
+  end if;
+end
+$$;
