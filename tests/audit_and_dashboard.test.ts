@@ -135,7 +135,7 @@ describe('Phase 6: Audit Trail, Operational Dashboards, and Synthetic Demo Data 
       expect(snapshot.publicName).toBe('Aarav Sharma');
     });
 
-    it('restricts audit queries to authorized roles (Principal, SysAdmin, Accountant) (US-38)', async () => {
+    it('restricts audit queries to authorized roles (Principal, SysAdmin) (US-38)', async () => {
       // Principal can view
       await expect(
         auditReportingService.listAuditLogs({}, principalSession)
@@ -146,10 +146,10 @@ describe('Phase 6: Audit Trail, Operational Dashboards, and Synthetic Demo Data 
         auditReportingService.listAuditLogs({}, sysAdminSession)
       ).resolves.toBeDefined();
 
-      // Accountant can view
+      // Accountant is denied audit query access (US-38 / ROLE_PERMISSION_MATRIX.md)
       await expect(
         auditReportingService.listAuditLogs({}, accountantSession)
-      ).resolves.toBeDefined();
+      ).rejects.toThrow(AuthorizationError);
 
       // Admission Officer is denied audit query access
       await expect(

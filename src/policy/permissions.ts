@@ -55,7 +55,6 @@ const ROLE_PERMISSIONS: Record<StaffRole, Set<PolicyAction>> = {
     'fees:view_dues',
     'fees:request_concession',
     'fees:request_reversal',
-    'audit:view_logs',
     'dashboard:view_metrics',
   ]),
   admission_officer: new Set([
@@ -82,7 +81,6 @@ const ROLE_PERMISSIONS: Record<StaffRole, Set<PolicyAction>> = {
   ]),
   read_only: new Set([
     'fees:view_dues',
-    'audit:view_logs',
     'dashboard:view_metrics',
   ]),
 };

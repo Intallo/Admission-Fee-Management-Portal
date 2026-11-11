@@ -216,6 +216,15 @@ describe('Admissions & Documents API Route Handlers (HTTP Integration)', () => {
     expect(body.application.status).toBe('submitted');
   });
 
+  it('POST /api/v1/admissions/applications/[id]/submit returns 403 for Principal', async () => {
+    currentMockSession.role = 'principal';
+    const req = new Request('http://localhost/api/v1/admissions/applications/any-id/submit', {
+      method: 'POST',
+    });
+    const res = await submitRoute(req, { params: { id: 'any-id' } });
+    expect(res.status).toBe(403);
+  });
+
   it('POST /api/v1/admissions/applications/[id]/approve completes atomic admission (Operation 1)', async () => {
     // Draft created and submitted by Admission Officer
     currentMockSession.role = 'admission_officer';

@@ -35,7 +35,7 @@ export async function POST(request: Request) {
   const correlationId = getOrCreateCorrelationId(request.headers);
 
   try {
-    const session = await requireRole(['accountant', 'principal']);
+    const session = await requireRole(['accountant']);
     const rawBody = await request.json();
 
     const parsed = createFeeHeadSchema.parse(rawBody);

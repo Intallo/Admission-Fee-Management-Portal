@@ -204,6 +204,52 @@ describe('Fees, Payments and Receipts API Route Handlers (HTTP Integration)', ()
       const res = await approveFeeStructureRoute(req, { params: { id: 'test-id' } });
       expect(res.status).toBe(403);
     });
+
+    it('POST /api/v1/fee-config/structures returns 403 for Principal (drafting restricted to Accounts Officer)', async () => {
+      currentMockSession.role = 'principal';
+      const req = new Request('http://localhost/api/v1/fee-config/structures', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          academicYearId,
+          gradeLevelId: std1GradeId,
+          lines: [{ feeHeadId: 'test-head', defaultAmount: '1000.00' }],
+        }),
+      });
+      const res = await createFeeStructureRoute(req);
+      expect(res.status).toBe(403);
+    });
+
+    it('POST /api/v1/fee-config/heads returns 403 for Principal', async () => {
+      currentMockSession.role = 'principal';
+      const req = new Request('http://localhost/api/v1/fee-config/heads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: 'TEST_HEAD',
+          name: 'Test Head',
+          category: 'school_fee',
+        }),
+      });
+      const res = await createFeeHeadRoute(req);
+      expect(res.status).toBe(403);
+    });
+
+    it('POST /api/v1/fee-config/transport-rates returns 403 for Principal', async () => {
+      currentMockSession.role = 'principal';
+      const req = new Request('http://localhost/api/v1/fee-config/transport-rates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          academicYearId,
+          routeName: 'Dharwad Route 1',
+          distanceKm: 10,
+          annualRate: '12000.00',
+        }),
+      });
+      const res = await createTransportRateRoute(req);
+      expect(res.status).toBe(403);
+    });
   });
 
   describe('Fees & Ledger API Routes', () => {
@@ -255,6 +301,24 @@ describe('Fees, Payments and Receipts API Route Handlers (HTTP Integration)', ()
       const repeatJson = await repeatRes.json();
       expect(repeatJson.paymentId).toBe(json.paymentId);
       expect(repeatJson.receiptNumber).toBe(json.receiptNumber);
+    });
+
+    it('POST /api/v1/fees/payments returns 403 for Principal (Accounts Officer desk only per US-21)', async () => {
+      currentMockSession.role = 'principal';
+      const req = new Request('http://localhost/api/v1/fees/payments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentAcademicRecordId: testStudentAcademicRecordId,
+          category: 'school_fee',
+          amount: '1000.00',
+          method: 'cash',
+          payerName: 'Parent',
+          allocations: [{ assessmentLineId: tuitionLineId, amount: '1000.00' }],
+        }),
+      });
+      const res = await recordPaymentRoute(req);
+      expect(res.status).toBe(403);
     });
 
     it('GET /api/v1/students/[id]/dues returns student dues', async () => {
@@ -404,6 +468,31 @@ describe('Fees, Payments and Receipts API Route Handlers (HTTP Integration)', ()
 
       const json = await res.json();
       expect(json.code).toBe('OUTSTANDING_DUES_EXIST');
+    });
+
+    it('POST /api/v1/receipts/final returns 403 for Principal', async () => {
+      currentMockSession.role = 'principal';
+      const req = new Request('http://localhost/api/v1/receipts/final', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentAcademicRecordId: testStudentAcademicRecordId }),
+      });
+      const res = await issueFinalReceiptRoute(req);
+      expect(res.status).toBe(403);
+    });
+
+    it('GET /api/v1/receipts/[id] returns 403 for Admission Officer', async () => {
+      currentMockSession.role = 'admission_officer';
+      const req = new Request(`http://localhost/api/v1/receipts/${paymentReceiptId}`);
+      const res = await getReceiptRoute(req, { params: { id: paymentReceiptId } });
+      expect(res.status).toBe(403);
+    });
+
+    it('GET /api/v1/receipts/[id]/pdf returns 403 for System Administrator', async () => {
+      currentMockSession.role = 'system_admin';
+      const req = new Request(`http://localhost/api/v1/receipts/${paymentReceiptId}/pdf`);
+      const res = await getReceiptPdfRoute(req, { params: { id: paymentReceiptId } });
+      expect(res.status).toBe(403);
     });
   });
 });

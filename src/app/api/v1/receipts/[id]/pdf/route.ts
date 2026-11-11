@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireAuthUser } from '@/auth/guards';
+import { requireRole } from '@/auth/guards';
 import { receiptsService } from '@/modules/receipts/service';
 import { formatErrorResponse } from '@/lib/errors';
 import { getOrCreateCorrelationId } from '@/lib/correlation';
@@ -15,7 +15,7 @@ export async function GET(
   const isDuplicate = searchParams.get('duplicate') === 'true';
 
   try {
-    await requireAuthUser();
+    await requireRole(['accountant', 'principal', 'clerk']);
 
     const pdfBuffer = await receiptsService.getReceiptPdfBuffer(params.id, isDuplicate);
 

@@ -71,8 +71,8 @@ export class AcademicYearsService {
     },
     actorSession: AuthenticatedUserSession
   ): Promise<AcademicYearDTO> {
-    if (actorSession.role !== 'principal' && actorSession.role !== 'system_admin') {
-      throw new AuthorizationError('Only Principal or System Administrator can create academic years.');
+    if (actorSession.role !== 'principal') {
+      throw new AuthorizationError('Only the Principal possesses authority to create academic years.');
     }
 
     // 1. Date chronological order validation

@@ -30,7 +30,7 @@ export async function POST(request: Request) {
   const correlationId = getOrCreateCorrelationId(request.headers);
 
   try {
-    const session = await requireRole(['principal', 'system_admin']);
+    const session = await requireRole(['principal']);
     const body = await request.json();
 
     const { label, startDate, endDate, notes } = body;
