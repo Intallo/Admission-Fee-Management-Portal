@@ -188,6 +188,23 @@ export class IdentityService {
 
     // Successful login: reset failed attempts using authenticated self-session
     recordSuccessfulLogin(normalizedEmail);
+
+    // Resolve active academic year dynamically from authoritative repository
+    let activeYearId = '00000000-0000-0000-0000-000000000001';
+    let activeYearLabel = '2026-2027';
+    try {
+      const years = await getRepositories().academicYears.listAcademicYears();
+      const currentYear = years.find((y) => y.status === 'current') || years[0];
+      if (currentYear) {
+        activeYearId = currentYear.id;
+        activeYearLabel = currentYear.label;
+      }
+    } catch (ayError) {
+      logger.warn('Failed to resolve active academic year during login, falling back to default', {
+        error: String(ayError),
+      });
+    }
+
     const selfSession: AuthenticatedUserSession = {
       staffId: staffRecord.id,
       authUserId: staffRecord.authUserId || staffRecord.id,
@@ -195,14 +212,10 @@ export class IdentityService {
       fullName: staffRecord.fullName,
       role: staffRecord.role,
       isActive: true,
-      activeAcademicYearId: '00000000-0000-0000-0000-000000000001',
-      activeAcademicYearLabel: '2026-2027',
+      activeAcademicYearId: activeYearId,
+      activeAcademicYearLabel: activeYearLabel,
     };
     await this.repo.recordLoginAttempt(staffRecord.id, true, null, selfSession);
-
-    // 4. Resolve active academic year
-    const activeYearId = '00000000-0000-0000-0000-000000000001';
-    const activeYearLabel = '2026-2027';
 
     const nowMs = Date.now();
     const sessionPayload: SessionPayload = {
