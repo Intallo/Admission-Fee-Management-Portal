@@ -15,7 +15,7 @@ describe('Session Secret Security & Validation', () => {
 
   it('fails closed when SESSION_SECRET is missing in production', () => {
     delete process.env.SESSION_SECRET;
-    process.env.NODE_ENV = 'production';
+    (process.env as any).NODE_ENV = 'production';
     expect(() => getSessionSecret()).toThrow(/SESSION_SECRET environment variable is missing/);
   });
 
@@ -27,7 +27,7 @@ describe('Session Secret Security & Validation', () => {
   it('does NOT fallback to SUPABASE_SERVICE_ROLE_KEY when SESSION_SECRET is missing in production', () => {
     delete process.env.SESSION_SECRET;
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-key-that-is-long-enough-32-characters!';
-    process.env.NODE_ENV = 'production';
+    (process.env as any).NODE_ENV = 'production';
     expect(() => getSessionSecret()).toThrow(/SESSION_SECRET environment variable is missing/);
   });
 
@@ -39,7 +39,7 @@ describe('Session Secret Security & Validation', () => {
 
   it('getServerEnv fails validation in production when SESSION_SECRET is missing', () => {
     delete process.env.SESSION_SECRET;
-    process.env.NODE_ENV = 'production';
+    (process.env as any).NODE_ENV = 'production';
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://127.0.0.1:54321';
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = 'sb_pub_test';
     expect(() => getServerEnv()).toThrow(/Missing required production environment variable: SESSION_SECRET/);
