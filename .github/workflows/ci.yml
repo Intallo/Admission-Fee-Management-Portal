@@ -56,10 +56,12 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y postgresql-client
 
-      - name: Generate Ephemeral High-Entropy Actor Signing Secret
+      - name: Generate Ephemeral High-Entropy Secrets
         run: |
           ACTOR_SECRET=$(openssl rand -hex 32)
           echo "ACTOR_SIGNING_SECRET=$ACTOR_SECRET" >> $GITHUB_ENV
+          SESSION_SECRET=$(openssl rand -hex 32)
+          echo "SESSION_SECRET=$SESSION_SECRET" >> $GITHUB_ENV
 
       - name: Bootstrap Test Database & Apply Migrations
         run: |
