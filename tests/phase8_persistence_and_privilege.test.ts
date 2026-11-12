@@ -55,6 +55,7 @@ describe('Phase 8: Durable Persistence & Runtime Least-Privilege Remediation', (
 
       try {
         (process.env as any).NODE_ENV = 'production';
+        process.env.SESSION_SECRET = 'a-dummy-session-secret-that-is-at-least-32-chars!';
         delete process.env.DATABASE_URL;
         setPersistenceMode('postgres');
 

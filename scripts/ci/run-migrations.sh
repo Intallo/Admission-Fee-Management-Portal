@@ -74,6 +74,13 @@ if [ -n "${ACTOR_SIGNING_SECRET:-}" ]; then
   echo "    Actor signing secret successfully provisioned into private.system_secrets."
 fi
 
+# Apply seed data if present (verifies demo accounts and reference catalog integrity)
+if [ -f "supabase/seed.sql" ]; then
+  echo "==> Applying seed data: supabase/seed.sql..."
+  psql -v ON_ERROR_STOP=1 -f "supabase/seed.sql"
+  echo "    Seed data applied successfully."
+fi
+
 # Step 4: Run Verification & Collect Migration Execution Evidence
 echo "==> [4/4] Collecting database verification evidence..."
 

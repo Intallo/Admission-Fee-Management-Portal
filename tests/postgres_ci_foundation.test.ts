@@ -141,6 +141,19 @@ describe('Milestone M8.3.1: PostgreSQL CI Foundation & Migration Verification', 
       expect(scriptContent).toContain('ON_ERROR_STOP=1');
       expect(scriptContent).toContain('psql -v ON_ERROR_STOP=1');
       expect(scriptContent).toContain('00_supabase_test_compat_bootstrap.sql');
+      expect(scriptContent).toContain('supabase/seed.sql');
+    });
+
+    it('verifies supabase/seed.sql provisions both demo staff members and corresponding security profiles', () => {
+      const seedPath = path.join(repoRoot, 'supabase', 'seed.sql');
+      expect(fs.existsSync(seedPath)).toBe(true);
+
+      const seedSql = fs.readFileSync(seedPath, 'utf-8');
+      expect(seedSql).toContain('insert into public.staff_members');
+      expect(seedSql).toContain('insert into public.staff_security_profiles');
+      expect(seedSql).toContain('system.admin@school-demo.example');
+      expect(seedSql).toContain('principal@school-demo.example');
+      expect(seedSql).toContain('scrypt$16384$8$1$');
     });
   });
 

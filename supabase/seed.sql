@@ -12,6 +12,22 @@ values
  ('Demo Accountant','accounts@school-demo.example','accountant',true)
 on conflict (email) do update set full_name=excluded.full_name, role=excluded.role, is_active=excluded.is_active;
 
+insert into public.staff_security_profiles (staff_id, password_hash, must_change_password)
+select sm.id,
+       'scrypt$16384$8$1$2b5c4d6dde398b0bf4670cb892ca6caf$ed8ee9d504f41d5925f48af8789655e2e9ff0151c6e21421264e2773a962c100433428607dd4ac3dab2f35c2918c6fd96719c3bfa891f7ad2801862df5e626eb',
+       case when sm.email = 'system.admin@school-demo.example' then true else false end
+from public.staff_members sm
+where sm.email in (
+  'system.admin@school-demo.example',
+  'principal@school-demo.example',
+  'admissions@school-demo.example',
+  'clerk@school-demo.example',
+  'accounts@school-demo.example'
+)
+on conflict (staff_id) do update
+set password_hash = excluded.password_hash,
+    must_change_password = excluded.must_change_password;
+
 insert into public.academic_years (label,start_date,end_date,status,notes)
 values
  ('2025-2026',date '2025-06-01',date '2026-05-31','closed','Synthetic prior year for year-scope testing.'),

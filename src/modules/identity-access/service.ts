@@ -111,9 +111,6 @@ export class IdentityService {
     activeAcademicYearId: string;
     activeAcademicYearLabel: string;
   }> {
-    if (!demoAccountsInitialized) {
-      await initializeDemoCredentials(this.repo);
-    }
     const normalizedEmail = email.trim().toLowerCase();
 
     // 1. Check user-specific lockout status (US-01 AC3)

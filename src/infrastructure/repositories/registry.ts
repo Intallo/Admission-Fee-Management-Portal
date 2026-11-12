@@ -101,12 +101,13 @@ export function getRepositories(): RepositoryRegistry {
   }
 
   if (mode === 'postgres' || isProduction) {
-    const env = getServerEnv();
-    if (!env.DATABASE_URL) {
+    if (!process.env.DATABASE_URL) {
       throw new Error(
         '[CRITICAL CONFIG ERROR] Production runtime requires DATABASE_URL with durable PostgreSQL persistence. Silent fallback to in-memory store is strictly prohibited.'
       );
     }
+
+    const env = getServerEnv();
 
     assertSafeDatabaseTarget(env.NEXT_PUBLIC_SUPABASE_URL, env.DATABASE_URL, env.ALLOW_REMOTE_DATABASE === 'true');
 
