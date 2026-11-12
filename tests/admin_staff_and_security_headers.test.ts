@@ -31,14 +31,17 @@ describe('Admin Staff API Error Handling & Security Headers', () => {
   });
   it('next.config.mjs contains Content-Security-Policy header', async () => {
     expect(nextConfig.headers).toBeDefined();
+    if (!nextConfig.headers) return;
     const headersConfig = await nextConfig.headers();
     expect(headersConfig.length).toBeGreaterThan(0);
 
     const defaultRoute = headersConfig.find((h: any) => h.source === '/:path*');
     expect(defaultRoute).toBeDefined();
+    if (!defaultRoute) return;
 
     const cspHeader = defaultRoute.headers.find((h: any) => h.key === 'Content-Security-Policy');
     expect(cspHeader).toBeDefined();
+    if (!cspHeader) return;
     expect(cspHeader.value).toContain("default-src 'self'");
     expect(cspHeader.value).toContain("frame-ancestors 'none'");
   });
