@@ -10,8 +10,10 @@
 --    admissions, and applications with automatic rollover.
 ------------------------------------------------------------------------------------
 
--- 1. Ensure pgcrypto extension is available for HMAC-SHA256 actor verification
-create extension if not exists pgcrypto;
+-- 1. Ensure pgcrypto extension is available for HMAC-SHA256 actor verification (standardized in schema extensions)
+create schema if not exists extensions;
+create extension if not exists pgcrypto with schema extensions;
+grant usage on schema extensions to public, anon, authenticated, school_app_user, school_app_login;
 
 -- 2. System secrets vault in schema private (inaccessible to school_app_user/school_app_login)
 create table if not exists private.system_secrets (
@@ -98,7 +100,7 @@ begin
   -- Under search_path = '', resolve hmac from extensions (Supabase) or public (standard PG)
   begin
     v_expected_signature := pg_catalog.encode(extensions.hmac((v_staff_id::text || ':' || v_db_role)::bytea, v_secret::bytea, 'sha256'), 'hex');
-  exception when undefined_function then
+  exception when undefined_function or invalid_schema_name then
     v_expected_signature := pg_catalog.encode(public.hmac((v_staff_id::text || ':' || v_db_role)::bytea, v_secret::bytea, 'sha256'), 'hex');
   end;
 

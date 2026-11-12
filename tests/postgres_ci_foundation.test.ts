@@ -195,10 +195,11 @@ describe('Milestone M8.3.1: PostgreSQL CI Foundation & Migration Verification', 
       expect(bootstrapSql).toContain('grant execute on function auth.jwt() to anon, authenticated, service_role');
     });
 
-    it('verifies pgcrypto and uuid-ossp extensions are requested', () => {
+    it('verifies pgcrypto and uuid-ossp extensions are requested with extensions schema layout', () => {
       const bootstrapSql = fs.readFileSync(bootstrapPath, 'utf-8');
-      expect(bootstrapSql).toContain('create extension if not exists "uuid-ossp";');
-      expect(bootstrapSql).toContain('create extension if not exists pgcrypto;');
+      expect(bootstrapSql).toContain('create schema if not exists extensions;');
+      expect(bootstrapSql).toContain('create extension if not exists "uuid-ossp" with schema extensions;');
+      expect(bootstrapSql).toContain('create extension if not exists pgcrypto with schema extensions;');
     });
   });
 
