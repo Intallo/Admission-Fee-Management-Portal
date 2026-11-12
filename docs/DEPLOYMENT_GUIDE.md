@@ -207,3 +207,19 @@ Before opening the live portal to school users, the client system administrator 
 - [ ] The default password for `system.admin@school-demo.example` has been changed upon first login.
 - [ ] Daily automated backups (`pg_dump`) are running and verified with test restoration.
 - [ ] Storage bucket permissions are private with zero public read/write access.
+
+---
+
+## 6. GitHub Repository & Main Branch Protection
+
+To prevent unauthorized changes and guarantee that all code in `main` is verified:
+1. Enforce branch protection on `main`:
+   - Require pull request before merging (minimum 1 review).
+   - Require status checks to pass before merging:
+     - `Lint, Typecheck, Unit Test, PostgreSQL Integration & Production Build` (from `.github/workflows/ci.yml`).
+   - Require branches to be up to date before merging (`strict: true`).
+   - Block force pushes (`allow_force_pushes: false`) and branch deletions (`allow_deletions: false`).
+2. Automated configuration script:
+   ```bash
+   GH_TOKEN=<your-token> ./scripts/ci/configure-branch-protection.sh Intallo/Admission-Fee-Management-Portal
+   ```

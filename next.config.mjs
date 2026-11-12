@@ -28,6 +28,20 @@ const nextConfig = {
             key: 'Referrer-Policy',
             value: 'strict-origin-when-cross-origin',
           },
+          {
+            key: 'Content-Security-Policy',
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
+              "style-src 'self' 'unsafe-inline'",
+              "img-src 'self' data: blob:",
+              "font-src 'self'",
+              "connect-src 'self' http://127.0.0.1:* http://localhost:* https://*.supabase.co",
+              "frame-ancestors 'none'",
+              "form-action 'self'",
+              "base-uri 'self'",
+            ].join('; '),
+          },
         ],
       },
     ];
