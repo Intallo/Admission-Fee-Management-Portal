@@ -315,11 +315,12 @@ begin
         updated_at = pg_catalog.now()
     where staff_id = p_staff_id;
   else
-    -- Failed login attempt: increment counter and enforce 5-failure / 15-minute lockout rule (US-01 AC3)
+    -- Failed login attempt: increment counter concurrency-safely with row lock and enforce 5-failure / 15-minute lockout rule (US-01 AC3)
     select coalesce(failed_login_attempts, 0)
     into v_current_failed
     from public.staff_security_profiles
-    where staff_id = p_staff_id;
+    where staff_id = p_staff_id
+    for update;
 
     if not found then
       v_current_failed := 0;

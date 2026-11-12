@@ -539,6 +539,12 @@ describe('Milestone M8.3.3: Authentication Gateway Security', () => {
   describe('4. Account Lockout & Attempt Tracking (auth_record_login_attempt)', () => {
     const repo = new PostgresIdentityRepository();
 
+    it('verifies auth_record_login_attempt uses row-level locking (for update) to prevent concurrency race conditions', () => {
+      const migrationPath = path.join(process.cwd(), 'supabase', 'migrations', '20261101130000_verifiable_actor_and_auth_gateway.sql');
+      const sql = fs.readFileSync(migrationPath, 'utf-8');
+      expect(sql).toMatch(/where staff_id = p_staff_id\s+for update;/i);
+    });
+
     it('increments failed login attempts on failed attempt', async () => {
       await repo.recordLoginAttempt(clerkId, false);
       const prof = await repo.getSecurityProfile(clerkId, 'clerk@school.example');
