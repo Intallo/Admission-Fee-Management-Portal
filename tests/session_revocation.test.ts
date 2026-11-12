@@ -137,5 +137,59 @@ describe('Server-side session revocation & logout invalidation', () => {
       const postLogoutSession = await getServerSession();
       expect(postLogoutSession).toBeNull();
     });
+
+    it('returns HTTP 500 when server-side revocation fails, but still clears browser cookie', async () => {
+      const repo = getRepositories().identity;
+      const nowMs = Date.now();
+      const sessionId = 'session-failure-test-id';
+
+      const payload: SessionPayload = {
+        sessionId,
+        staffId: 'principal-uuid-test',
+        authUserId: null,
+        email: 'principal@school-demo.example',
+        fullName: 'Principal Sharma',
+        role: 'principal',
+        isActive: true,
+        activeAcademicYearId: '00000000-0000-0000-0000-000000000001',
+        activeAcademicYearLabel: '2026-2027',
+        mustChangePassword: false,
+        createdAt: nowMs,
+        lastActivityAt: nowMs,
+        expiresAt: nowMs + MAX_SESSION_LIFETIME_MS,
+      };
+
+      const token = signSessionToken(payload);
+
+      // Force repository revocation failure
+      const originalRevoke = repo.revokeSession.bind(repo);
+      repo.revokeSession = async () => {
+        throw new Error('Database connection lost during revocation persistence');
+      };
+
+      try {
+        const logoutReq = new Request('http://localhost:3000/api/v1/auth/logout', {
+          method: 'POST',
+          headers: {
+            cookie: `${SESSION_COOKIE_NAME}=${token}`,
+          },
+        });
+
+        const logoutRes = await logoutRoute(logoutReq);
+        expect(logoutRes.status).toBe(500);
+
+        const body = await logoutRes.json();
+        expect(body.success).toBe(false);
+        expect(body.error).toContain('Failed to record server-side session revocation');
+
+        // Verify session cookie was still instructed to be cleared
+        const setCookieHeader = logoutRes.headers.get('set-cookie');
+        expect(setCookieHeader).toBeDefined();
+        expect(setCookieHeader).toContain(`${SESSION_COOKIE_NAME}=;`);
+        expect(setCookieHeader).toContain('Max-Age=0');
+      } finally {
+        repo.revokeSession = originalRevoke;
+      }
+    });
   });
 });
