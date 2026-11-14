@@ -119,21 +119,26 @@ export class IdentityService {
   }
 
   private async resolveActiveAcademicYear(): Promise<{ id: string; label: string }> {
-    let activeYearId = '00000000-0000-0000-0000-000000000001';
-    let activeYearLabel = '2026-2027';
     try {
       const years = await getRepositories().academicYears.listAcademicYears();
-      const currentYear = years.find((y) => y.status === 'current') || years[0];
+      const currentYear = years.find((y) => y.status === 'current');
       if (currentYear) {
-        activeYearId = currentYear.id;
-        activeYearLabel = currentYear.label;
+        return { id: currentYear.id, label: currentYear.label };
       }
-    } catch (ayError) {
-      logger.warn('Failed to resolve active academic year, falling back to default', {
+      throw new BusinessRuleError(
+        'No active academic year found with status "current". An active academic year must be configured before issuing sessions.'
+      );
+    } catch (ayError: any) {
+      if (ayError instanceof BusinessRuleError) {
+        throw ayError;
+      }
+      logger.error('Failed to resolve active academic year from repository', {
         error: String(ayError),
       });
+      throw new BusinessRuleError(
+        `Unable to resolve active academic year: ${ayError?.message || String(ayError)}`
+      );
     }
-    return { id: activeYearId, label: activeYearLabel };
   }
 
   async isSessionRevoked(sessionId: string): Promise<boolean> {

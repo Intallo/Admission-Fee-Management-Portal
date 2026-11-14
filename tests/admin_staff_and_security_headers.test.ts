@@ -47,6 +47,83 @@ describe('Admin Staff API Error Handling & Security Headers', () => {
     expect(cspHeader.value).toContain("frame-ancestors 'none'");
   });
 
+  it('next.config.mjs removes unsafe-eval from Content-Security-Policy in production', async () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    try {
+      (process.env as any).NODE_ENV = 'production';
+      // Re-evaluate headersConfig in production
+      const headersConfig = await nextConfig.headers!();
+      const defaultRoute = headersConfig.find((h: any) => h.source === '/:path*');
+      const cspHeader = defaultRoute?.headers.find((h: any) => h.key === 'Content-Security-Policy');
+      expect(cspHeader).toBeDefined();
+      expect(cspHeader?.value).not.toContain("'unsafe-eval'");
+      expect(cspHeader?.value).toContain("script-src 'self' 'unsafe-inline'");
+    } finally {
+      (process.env as any).NODE_ENV = originalNodeEnv;
+    }
+  });
+
+  it('GET /api/v1/admin/staff passes authenticated session to repository and returns staff list', async () => {
+    const nowMs = Date.now();
+    const adminPayload: SessionPayload = {
+      sessionId: 'admin-staff-list-session',
+      staffId: 'admin-uuid-test',
+      authUserId: null,
+      email: 'system.admin@school-demo.example',
+      fullName: 'Demo System Administrator',
+      role: 'system_admin',
+      isActive: true,
+      activeAcademicYearId: '00000000-0000-0000-0000-000000000001',
+      activeAcademicYearLabel: '2026-2027',
+      mustChangePassword: false,
+      createdAt: nowMs,
+      lastActivityAt: nowMs,
+      expiresAt: nowMs + MAX_SESSION_LIFETIME_MS,
+    };
+
+    const token = signSessionToken(adminPayload);
+    cookieMap.set(SESSION_COOKIE_NAME, token);
+
+    const repo = getRepositories().identity;
+    let passedSession: any = null;
+    const originalListStaff = repo.listStaff.bind(repo);
+    repo.listStaff = async (session?: any) => {
+      passedSession = session;
+      return [
+        {
+          id: 'admin-uuid-test',
+          email: 'system.admin@school-demo.example',
+          role: 'system_admin',
+          fullName: 'Demo System Administrator',
+          phone: null,
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      ];
+    };
+
+    try {
+      const req = new Request('http://localhost:3000/api/v1/admin/staff', {
+        headers: {
+          cookie: `${SESSION_COOKIE_NAME}=${token}`,
+        },
+      });
+
+      const res = await getStaffRoute(req);
+      expect(res.status).toBe(200);
+      expect(passedSession).toBeDefined();
+      expect(passedSession.role).toBe('system_admin');
+      expect(passedSession.staffId).toBe('admin-uuid-test');
+
+      const body = await res.json();
+      expect(body.staff).toHaveLength(1);
+      expect(body.staff[0].email).toBe('system.admin@school-demo.example');
+    } finally {
+      repo.listStaff = originalListStaff;
+    }
+  });
+
   it('GET /api/v1/admin/staff returns HTTP 500 when database query fails, without suppressing errors', async () => {
     const nowMs = Date.now();
     const adminPayload: SessionPayload = {

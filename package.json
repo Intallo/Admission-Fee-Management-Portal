@@ -13,7 +13,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "db:bootstrap:demo": "tsx scripts/bootstrap-demo-accounts.ts",
-    "db:migrate:validate": "tsx scripts/ci/migration-runner.ts"
+    "db:migrate:apply": "tsx scripts/ci/migration-runner.ts",
+    "db:migrate:validate": "tsx scripts/ci/migration-runner.ts --verify-only"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
@@ -40,6 +41,7 @@
     "eslint-config-next": "14.2.15",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.14",
+    "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "vite-tsconfig-paths": "^5.0.1",
     "vitest": "^2.1.3"

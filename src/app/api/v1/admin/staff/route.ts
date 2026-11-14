@@ -12,7 +12,7 @@ export async function GET(request: Request) {
   const correlationId = getOrCreateCorrelationId(request.headers);
 
   try {
-    await requireRole(['system_admin']);
+    const session = await requireRole(['system_admin']);
 
     let staffList: Array<{
       id: string;
@@ -23,7 +23,7 @@ export async function GET(request: Request) {
       createdAt: string;
     }> = [];
 
-    const staffMembers = await getRepositories().identity.listStaff();
+    const staffMembers = await getRepositories().identity.listStaff(session);
     if (staffMembers && staffMembers.length > 0) {
       staffList = staffMembers.map((s: any) => ({
         id: s.id,

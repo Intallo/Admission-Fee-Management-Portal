@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireRole } from '@/auth/guards';
 import { feesLedgerService } from '@/modules/fees-ledger/service';
 import { recordPaymentSchema } from '@/validation/fees';
-import { formatErrorResponse } from '@/lib/errors';
+import { formatErrorResponse, ValidationError } from '@/lib/errors';
 import { getOrCreateCorrelationId } from '@/lib/correlation';
 import { toDecimalInrString } from '@/modules/shared/types';
 
@@ -10,10 +10,17 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   const correlationId = getOrCreateCorrelationId(request.headers);
-  const idempotencyKey = request.headers.get('idempotency-key') || undefined;
+  const idempotencyKey = request.headers.get('idempotency-key')?.trim();
 
   try {
     const session = await requireRole(['accountant', 'clerk']);
+
+    if (!idempotencyKey) {
+      throw new ValidationError(
+        "Missing required header: 'Idempotency-Key'. An idempotency key is required to guarantee payment transaction integrity."
+      );
+    }
+
     const rawBody = await request.json();
 
     const parsed = recordPaymentSchema.parse(rawBody);

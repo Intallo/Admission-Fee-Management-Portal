@@ -171,18 +171,24 @@ if (
   typeof require !== 'undefined' &&
   (require.main === module || (typeof process !== 'undefined' && process.argv[1]?.includes('migration-runner')))
 ) {
+  const isVerifyOnly = process.argv.includes('--verify-only');
   const dbUrl = process.env.DATABASE_URL || 'postgresql://postgres:postgrespassword@localhost:5432/school_test_db';
-  console.log(`==> Validating Supabase migrations against ${dbUrl}...`);
   const pool = new Pool({ connectionString: dbUrl });
 
-  runMigrationSequence(pool, { includeBootstrap: true })
-    .then(async (result) => {
-      if (result.error) {
-        console.error(`[MIGRATION ERROR] Failed on ${result.failedMigration}:`, result.error);
-        await pool.end();
-        process.exit(1);
+  const run = async () => {
+    try {
+      if (isVerifyOnly) {
+        console.log(`==> Verifying database state against ${dbUrl} (--verify-only mode)...`);
+      } else {
+        console.log(`==> Applying and validating Supabase migrations against ${dbUrl}...`);
+        const result = await runMigrationSequence(pool, { includeBootstrap: true });
+        if (result.error) {
+          console.error(`[MIGRATION ERROR] Failed on ${result.failedMigration}:`, result.error);
+          await pool.end();
+          process.exit(1);
+        }
+        console.log(`==> Successfully applied ${result.migrationsApplied.length} migrations in ${result.durationMs}ms`);
       }
-      console.log(`==> Successfully applied ${result.migrationsApplied.length} migrations in ${result.durationMs}ms`);
 
       const report = await verifyDatabaseState(pool);
       console.log('==> Database Verification Report:');
@@ -198,13 +204,21 @@ if (
         process.exit(1);
       }
 
+      if (report.publicTableCount === 0) {
+        console.error('[ERROR] Database verification failed: no public tables found.');
+        await pool.end();
+        process.exit(1);
+      }
+
       await pool.end();
       console.log('==> Migration validation completed successfully.');
       process.exit(0);
-    })
-    .catch(async (err) => {
+    } catch (err: any) {
       console.error('[FATAL ERROR]', err);
       await pool.end();
       process.exit(1);
-    });
+    }
+  };
+
+  run();
 }

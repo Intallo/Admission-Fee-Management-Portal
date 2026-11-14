@@ -29,7 +29,7 @@ describe('PostgreSQL-Backed Authentication Integration', () => {
       process.env.DATABASE_URL = dbUrl;
       process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321';
       process.env.ALLOW_REMOTE_DATABASE = 'false';
-      process.env.ACTOR_SIGNING_SECRET = process.env.ACTOR_SIGNING_SECRET || '3de4c2eb6696cd73c84b7ef5ded86ab8fbd0325f073d9d895d03947a2096aed4';
+      process.env.ACTOR_SIGNING_SECRET = process.env.ACTOR_SIGNING_SECRET || 'actor-secret-for-postgres-integration-tests-32';
       process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'session-secret-for-postgres-integration-tests-32';
       clearAllLockouts();
       identityService.resetForTesting();

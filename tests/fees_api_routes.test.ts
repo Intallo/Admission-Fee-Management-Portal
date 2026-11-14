@@ -303,6 +303,28 @@ describe('Fees, Payments and Receipts API Route Handlers (HTTP Integration)', ()
       expect(repeatJson.receiptNumber).toBe(json.receiptNumber);
     });
 
+    it('POST /api/v1/fees/payments returns 400 when Idempotency-Key header is missing', async () => {
+      currentMockSession.role = 'accountant';
+      const req = new Request('http://localhost/api/v1/fees/payments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentAcademicRecordId: testStudentAcademicRecordId,
+          category: 'school_fee',
+          amount: '1000.00',
+          method: 'cash',
+          payerName: 'Parent',
+          allocations: [{ assessmentLineId: tuitionLineId, amount: '1000.00' }],
+        }),
+      });
+      const res = await recordPaymentRoute(req);
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.status).toBe(400);
+      expect(json.title).toBe('Invalid Request Parameters');
+      expect(json.detail).toContain('Idempotency-Key');
+    });
+
     it('POST /api/v1/fees/payments returns 403 for Principal (Accounts Officer desk only per US-21)', async () => {
       currentMockSession.role = 'principal';
       const req = new Request('http://localhost/api/v1/fees/payments', {

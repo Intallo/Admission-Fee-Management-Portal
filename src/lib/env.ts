@@ -2,6 +2,15 @@ import { z } from 'zod';
 
 export const PROTECTED_REMOTE_REF = 'fjrfyzamiirqzitdchkz';
 
+export const KNOWN_INSECURE_SECRETS = [
+  'dev-session-secret-must-be-at-least-32-chars-long!',
+  '3de4c2eb6696cd73c84b7ef5ded86ab8fbd0325f073d9d895d03947a2096aed4',
+  'generate-with-openssl-rand-hex-32-session-secret-placeholder',
+  'generate-with-openssl-rand-hex-32-actor-secret-placeholder',
+  'your-high-entropy-session-secret-here-at-least-32-characters',
+  'your-high-entropy-actor-secret-here-at-least-32-characters',
+];
+
 /**
  * Public client environment schema (safe to expose to browser).
  * Only keys prefixed with NEXT_PUBLIC_ are included.
@@ -125,6 +134,16 @@ export function getServerEnv(): ServerEnv {
     }
     if (parsed.data.SESSION_SECRET === parsed.data.ACTOR_SIGNING_SECRET) {
       throw new Error('[SECURITY ERROR] SESSION_SECRET and ACTOR_SIGNING_SECRET must be dedicated, distinct secrets.');
+    }
+    if (KNOWN_INSECURE_SECRETS.includes(parsed.data.SESSION_SECRET)) {
+      throw new Error(
+        '[SECURITY ERROR] Insecure or example SESSION_SECRET detected in production. Generate a dedicated cryptographically secure secret (e.g. openssl rand -hex 32).'
+      );
+    }
+    if (KNOWN_INSECURE_SECRETS.includes(parsed.data.ACTOR_SIGNING_SECRET)) {
+      throw new Error(
+        '[SECURITY ERROR] Insecure or example ACTOR_SIGNING_SECRET detected in production. Generate a dedicated cryptographically secure secret (e.g. openssl rand -hex 32).'
+      );
     }
   }
 
