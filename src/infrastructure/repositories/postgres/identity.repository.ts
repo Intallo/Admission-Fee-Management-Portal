@@ -77,7 +77,7 @@ export class PostgresIdentityRepository implements IIdentityRepository {
       };
     };
 
-    if (session && session.staffId) {
+    if (session && session.staffId && session.staffId !== '00000000-0000-0000-0000-000000000000') {
       return withTransaction(session, executeQuery, existingClient);
     }
     return withSystemTransaction(executeQuery, existingClient);
@@ -121,7 +121,7 @@ export class PostgresIdentityRepository implements IIdentityRepository {
       );
     };
 
-    if (session && session.staffId) {
+    if (session && session.staffId && session.staffId !== '00000000-0000-0000-0000-000000000000') {
       return withTransaction(session, executeQuery, existingClient);
     }
     return withSystemTransaction(executeQuery, existingClient);
@@ -206,6 +206,26 @@ export class PostgresIdentityRepository implements IIdentityRepository {
         updatedAt: nowIso,
       };
     }, existingClient);
+  }
+
+  async ensureSecurityProfile(
+    staffId: string,
+    passwordHash: string,
+    mustChangePassword: boolean = false,
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
+  ): Promise<void> {
+    const executeQuery = async (client: any) => {
+      await client.query(
+        `select private.auth_create_security_profile($1, $2, $3)`,
+        [staffId, passwordHash, mustChangePassword]
+      );
+    };
+
+    if (session && session.staffId && session.staffId !== '00000000-0000-0000-0000-000000000000') {
+      return withTransaction(session, executeQuery, existingClient);
+    }
+    return withSystemTransaction(executeQuery, existingClient);
   }
 
   async updateStaff(

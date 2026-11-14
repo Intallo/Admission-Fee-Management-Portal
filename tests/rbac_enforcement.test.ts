@@ -19,6 +19,16 @@ describe('Centralized RBAC Enforcement (AUTHORIZATION_MATRIX.md)', () => {
       expect(hasPermission('principal', 'admissions:submit_verification')).toBe(false);
       expect(() => enforcePolicy('principal', 'admissions:submit_verification')).toThrow(AuthorizationError);
     });
+
+    it('strictly forbids recording payments (Accounts Officer desk only per US-21)', () => {
+      expect(hasPermission('principal', 'fees:record_payment')).toBe(false);
+      expect(() => enforcePolicy('principal', 'fees:record_payment')).toThrow(AuthorizationError);
+    });
+
+    it('strictly forbids drafting fee structures (Accounts Officer drafting per REG-05 / US-18)', () => {
+      expect(hasPermission('principal', 'fees:configure_structure')).toBe(false);
+      expect(() => enforcePolicy('principal', 'fees:configure_structure')).toThrow(AuthorizationError);
+    });
   });
 
   describe('Admission Officer Authority (Demographics & Verification)', () => {
@@ -59,12 +69,25 @@ describe('Centralized RBAC Enforcement (AUTHORIZATION_MATRIX.md)', () => {
       expect(() => enforcePolicy('accountant', 'fees:approve_concession')).toThrow(AuthorizationError);
       expect(() => enforcePolicy('accountant', 'fees:approve_reversal')).toThrow(AuthorizationError);
     });
+
+    it('strictly forbids inspecting audit logs (Principal & System Admin only per US-38, RLS audit_logs_select_policy)', () => {
+      expect(hasPermission('accountant', 'audit:view_logs')).toBe(false);
+      expect(() => enforcePolicy('accountant', 'audit:view_logs')).toThrow(AuthorizationError);
+    });
+  });
+
+  describe('Read-Only Role Authority', () => {
+    it('strictly forbids inspecting audit logs (restricted to Principal and System Admin)', () => {
+      expect(hasPermission('read_only', 'audit:view_logs')).toBe(false);
+      expect(() => enforcePolicy('read_only', 'audit:view_logs')).toThrow(AuthorizationError);
+    });
   });
 
   describe('System Administrator Authority (Technical Staff Management)', () => {
-    it('permits technical staff directory operations and audit log inspection', () => {
+    it('permits technical staff directory operations, audit log inspection, and aggregate dashboard metrics', () => {
       expect(hasPermission('system_admin', 'users:manage_accounts')).toBe(true);
       expect(hasPermission('system_admin', 'audit:view_logs')).toBe(true);
+      expect(hasPermission('system_admin', 'dashboard:view_metrics')).toBe(true);
     });
 
     it('strictly forbids business admissions, financial policy, payments, and certificates', () => {

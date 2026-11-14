@@ -34,6 +34,8 @@ export async function POST(request: Request) {
     }
   }
 
+  let revocationError: Error | null = null;
+
   if (token) {
     try {
       const verification = verifySessionToken(token);
@@ -48,24 +50,32 @@ export async function POST(request: Request) {
           correlationId,
         });
       }
-    } catch (error) {
-      logger.warn('Failed to record server-side session revocation during logout', {
+    } catch (error: any) {
+      revocationError = error instanceof Error ? error : new Error(String(error));
+      logger.error('Failed to record server-side session revocation during logout', {
         error: String(error),
         correlationId,
       });
     }
   }
 
-  const response = NextResponse.json(
-    { success: true, message: 'Logged out successfully.' },
-    {
-      status: 200,
-      headers: {
-        'x-correlation-id': correlationId,
-      },
-    }
-  );
+  const status = revocationError ? 500 : 200;
+  const body = revocationError
+    ? {
+        success: false,
+        error: 'Failed to record server-side session revocation during logout. Token revocation could not be persisted.',
+        correlationId,
+      }
+    : { success: true, message: 'Logged out successfully.' };
 
+  const response = NextResponse.json(body, {
+    status,
+    headers: {
+      'x-correlation-id': correlationId,
+    },
+  });
+
+  // Always clear the browser session cookie, even if server-side revocation persistence failed
   response.cookies.set({
     name: SESSION_COOKIE_NAME,
     value: '',

@@ -26,8 +26,21 @@ export type TokenVerificationResult =
   | { valid: true; session: SessionPayload }
   | { valid: false; reason: 'INVALID_SIGNATURE' | 'MALFORMED' | 'SESSION_EXPIRED' | 'SESSION_IDLE_TIMEOUT' };
 
-function getSessionSecret(): string {
-  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SESSION_SECRET || 'dev-fallback-school-portal-signing-secret-key-32chars!';
+export function getSessionSecret(): string {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === 'test') {
+      return 'test-session-secret-32-character-minimum-string!';
+    }
+    throw new Error(
+      '[SECURITY VIOLATION] SESSION_SECRET environment variable is missing. A dedicated 32+ character secret is required.'
+    );
+  }
+  if (secret.length < 32) {
+    throw new Error(
+      '[SECURITY VIOLATION] SESSION_SECRET is too short. It must contain at least 32 cryptographically secure characters.'
+    );
+  }
   return secret;
 }
 

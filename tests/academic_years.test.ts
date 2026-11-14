@@ -65,6 +65,30 @@ describe('Academic Years Lifecycle & Closed-Year Protections (SBR-05)', () => {
     ).rejects.toThrow(AuthorizationError);
   });
 
+  it('prohibits System Administrator from creating academic years (Principal calendar prerogative)', async () => {
+    const sysAdminSession: AuthenticatedUserSession = {
+      staffId: 'sys-uuid',
+      authUserId: 'sys-auth-uuid',
+      email: 'admin@school-demo.example',
+      fullName: 'System Admin',
+      role: 'system_admin',
+      isActive: true,
+      activeAcademicYearId: '00000000-0000-0000-0000-000000000001',
+      activeAcademicYearLabel: '2026-2027',
+    };
+
+    await expect(
+      academicYearsService.createAcademicYear(
+        {
+          label: '2029-2030-sys',
+          startDate: '2029-06-01',
+          endDate: '2030-05-31',
+        },
+        sysAdminSession
+      )
+    ).rejects.toThrow(AuthorizationError);
+  });
+
   it('rejects academic year creation when start date is on or after end date', async () => {
     await expect(
       academicYearsService.createAcademicYear(

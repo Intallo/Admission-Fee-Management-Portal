@@ -152,6 +152,13 @@ describe('Phase 6: Student Records, Certificates, Audit & Dashboard API Routes',
       expect(body.currentAcademicRecord.status).toBe('admitted');
     });
 
+    it('GET /api/v1/students/[id] - returns 403 for System Administrator (zero student view rights)', async () => {
+      currentMockSession.role = 'system_admin';
+      const req = new Request(`http://localhost/api/v1/students/${testAcademicRecordId}`);
+      const res = await getStudentProfileRoute(req, { params: { id: testAcademicRecordId } });
+      expect(res.status).toBe(403);
+    });
+
     it('POST /api/v1/students/[id]/status - marks student Left / Transferred (Principal)', async () => {
       const req = new Request(`http://localhost/api/v1/students/${testAcademicRecordId}/status`, {
         method: 'POST',
@@ -275,6 +282,13 @@ describe('Phase 6: Student Records, Certificates, Audit & Dashboard API Routes',
       expect(body.data).toBeDefined();
     });
 
+    it('GET /api/v1/audit-logs - returns 403 for Accountant (oversight restricted to Principal and System Admin)', async () => {
+      currentMockSession.role = 'accountant';
+      const req = new Request('http://localhost/api/v1/audit-logs');
+      const res = await getAuditLogsRoute(req);
+      expect(res.status).toBe(403);
+    });
+
     it('GET /api/v1/dashboard/metrics - returns operational metrics for Principal', async () => {
       const req = new Request('http://localhost/api/v1/dashboard/metrics');
       const res = await getDashboardMetricsRoute(req);
@@ -285,11 +299,14 @@ describe('Phase 6: Student Records, Certificates, Audit & Dashboard API Routes',
       expect(body.financials).toBeDefined();
     });
 
-    it('GET /api/v1/dashboard/metrics - denies System Administrator', async () => {
+    it('GET /api/v1/dashboard/metrics - returns operational metrics for System Administrator without financials', async () => {
       currentMockSession.role = 'system_admin';
       const req = new Request('http://localhost/api/v1/dashboard/metrics');
       const res = await getDashboardMetricsRoute(req);
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.academicYearId).toBe(currentYearId);
+      expect(body.financials).toBeUndefined();
     });
   });
 });

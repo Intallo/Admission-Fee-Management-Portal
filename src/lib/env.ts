@@ -26,6 +26,14 @@ export const serverEnvSchema = clientEnvSchema.extend({
   NODE_ENV: z
     .enum(['development', 'production', 'test'])
     .default('development'),
+  SESSION_SECRET: z
+    .string()
+    .min(32, 'SESSION_SECRET must be at least 32 characters')
+    .optional(),
+  ACTOR_SIGNING_SECRET: z
+    .string()
+    .min(32, 'ACTOR_SIGNING_SECRET must be at least 32 characters')
+    .optional(),
   SUPABASE_SERVICE_ROLE_KEY: z
     .string()
     .min(1, 'SUPABASE_SERVICE_ROLE_KEY must be a valid key if provided')
@@ -96,6 +104,8 @@ export function getServerEnv(): ServerEnv {
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
     NODE_ENV: process.env.NODE_ENV,
+    SESSION_SECRET: process.env.SESSION_SECRET,
+    ACTOR_SIGNING_SECRET: process.env.ACTOR_SIGNING_SECRET,
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
     DATABASE_URL: process.env.DATABASE_URL,
     ALLOW_REMOTE_DATABASE: process.env.ALLOW_REMOTE_DATABASE,
@@ -104,6 +114,18 @@ export function getServerEnv(): ServerEnv {
   if (!parsed.success) {
     const errorDetails = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join(', ');
     throw new Error(`[ENV CONFIG ERROR] Missing or invalid server environment: ${errorDetails}`);
+  }
+
+  if (parsed.data.NODE_ENV === 'production') {
+    if (!parsed.data.SESSION_SECRET) {
+      throw new Error('[ENV CONFIG ERROR] Missing required production environment variable: SESSION_SECRET (min 32 chars)');
+    }
+    if (!parsed.data.ACTOR_SIGNING_SECRET) {
+      throw new Error('[ENV CONFIG ERROR] Missing required production environment variable: ACTOR_SIGNING_SECRET (min 32 chars)');
+    }
+    if (parsed.data.SESSION_SECRET === parsed.data.ACTOR_SIGNING_SECRET) {
+      throw new Error('[SECURITY ERROR] SESSION_SECRET and ACTOR_SIGNING_SECRET must be dedicated, distinct secrets.');
+    }
   }
 
   const allowRemote = parsed.data.ALLOW_REMOTE_DATABASE === 'true';

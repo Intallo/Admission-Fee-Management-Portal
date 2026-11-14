@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "db:bootstrap:demo": "tsx scripts/bootstrap-demo-accounts.ts",
+    "db:migrate:validate": "tsx scripts/ci/migration-runner.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",

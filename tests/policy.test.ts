@@ -38,6 +38,10 @@ describe('Role-Based Policy Enforcement (AUTHORIZATION_MATRIX.md)', () => {
     it('denies sensitive demographic PII access', () => {
       expect(hasPermission('accountant', 'admissions:view_sensitive_pii')).toBe(false);
     });
+
+    it('denies audit log inspection (Principal and System Admin only per US-38)', () => {
+      expect(hasPermission('accountant', 'audit:view_logs')).toBe(false);
+    });
   });
 
   describe('Admission Officer Permissions', () => {
@@ -58,9 +62,10 @@ describe('Role-Based Policy Enforcement (AUTHORIZATION_MATRIX.md)', () => {
   });
 
   describe('System Administrator Permissions', () => {
-    it('grants user account management and audit views', () => {
+    it('grants user account management, audit views, and dashboard metrics', () => {
       expect(hasPermission('system_admin', 'users:manage_accounts')).toBe(true);
       expect(hasPermission('system_admin', 'audit:view_logs')).toBe(true);
+      expect(hasPermission('system_admin', 'dashboard:view_metrics')).toBe(true);
     });
 
     it('denies access to sensitive PII and business decisions', () => {
@@ -68,6 +73,12 @@ describe('Role-Based Policy Enforcement (AUTHORIZATION_MATRIX.md)', () => {
       expect(hasPermission('system_admin', 'admissions:approve_decision')).toBe(false);
       expect(hasPermission('system_admin', 'fees:approve_concession')).toBe(false);
       expect(hasPermission('system_admin', 'fees:record_payment')).toBe(false);
+    });
+  });
+
+  describe('Read-Only Permissions', () => {
+    it('denies audit log inspection', () => {
+      expect(hasPermission('read_only', 'audit:view_logs')).toBe(false);
     });
   });
 

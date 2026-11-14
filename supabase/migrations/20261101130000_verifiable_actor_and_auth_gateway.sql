@@ -10,8 +10,22 @@
 --    admissions, and applications with automatic rollover.
 ------------------------------------------------------------------------------------
 
--- 1. Ensure pgcrypto extension is available for HMAC-SHA256 actor verification
-create extension if not exists pgcrypto;
+-- 1. Ensure pgcrypto extension is available for HMAC-SHA256 actor verification (standardized in schema extensions)
+create schema if not exists extensions;
+grant usage on schema extensions to public, anon, authenticated, school_app_user, school_app_login;
+
+do $$
+begin
+  if not exists (select 1 from pg_extension where extname = 'pgcrypto') then
+    create extension pgcrypto with schema extensions;
+  elsif exists (select 1 from pg_extension e join pg_namespace n on e.extnamespace = n.oid where e.extname = 'pgcrypto' and n.nspname <> 'extensions') then
+    begin
+      alter extension pgcrypto set schema extensions;
+    exception when others then
+      null;
+    end;
+  end if;
+end $$;
 
 -- 2. System secrets vault in schema private (inaccessible to school_app_user/school_app_login)
 create table if not exists private.system_secrets (
@@ -95,7 +109,12 @@ begin
     return null;
   end if;
 
-  v_expected_signature := pg_catalog.encode(public.hmac((v_staff_id::text || ':' || v_db_role)::bytea, v_secret::bytea, 'sha256'), 'hex');
+  -- Under search_path = '', resolve hmac from extensions (Supabase) or public (standard PG)
+  begin
+    v_expected_signature := pg_catalog.encode(extensions.hmac((v_staff_id::text || ':' || v_db_role)::bytea, v_secret::bytea, 'sha256'), 'hex');
+  exception when undefined_function or invalid_schema_name then
+    v_expected_signature := pg_catalog.encode(public.hmac((v_staff_id::text || ':' || v_db_role)::bytea, v_secret::bytea, 'sha256'), 'hex');
+  end;
 
   if lower(v_signature) <> lower(v_expected_signature) then
     return null; -- Invalid signature: forged identity rejected
@@ -308,11 +327,12 @@ begin
         updated_at = pg_catalog.now()
     where staff_id = p_staff_id;
   else
-    -- Failed login attempt: increment counter and enforce 5-failure / 15-minute lockout rule (US-01 AC3)
+    -- Failed login attempt: increment counter concurrency-safely with row lock and enforce 5-failure / 15-minute lockout rule (US-01 AC3)
     select coalesce(failed_login_attempts, 0)
     into v_current_failed
     from public.staff_security_profiles
-    where staff_id = p_staff_id;
+    where staff_id = p_staff_id
+    for update;
 
     if not found then
       v_current_failed := 0;

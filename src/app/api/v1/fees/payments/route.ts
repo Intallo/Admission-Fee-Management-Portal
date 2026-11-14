@@ -13,7 +13,7 @@ export async function POST(request: Request) {
   const idempotencyKey = request.headers.get('idempotency-key') || undefined;
 
   try {
-    const session = await requireRole(['accountant', 'principal', 'clerk']);
+    const session = await requireRole(['accountant', 'clerk']);
     const rawBody = await request.json();
 
     const parsed = recordPaymentSchema.parse(rawBody);

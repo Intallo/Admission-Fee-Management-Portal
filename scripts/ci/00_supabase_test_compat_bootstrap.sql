@@ -22,9 +22,11 @@ begin
 end
 $$;
 
--- 1. Required PostgreSQL Extensions
-create extension if not exists "uuid-ossp";
-create extension if not exists pgcrypto;
+-- 1. Required PostgreSQL Extensions (Matching Supabase Schema Layout)
+create schema if not exists extensions;
+grant usage on schema extensions to public;
+create extension if not exists "uuid-ossp" with schema extensions;
+create extension if not exists pgcrypto with schema extensions;
 
 -- 2. Required Supabase Roles
 -- These roles are standard in Supabase hosted environments and are required

@@ -12,6 +12,22 @@ values
  ('Demo Accountant','accounts@school-demo.example','accountant',true)
 on conflict (email) do update set full_name=excluded.full_name, role=excluded.role, is_active=excluded.is_active;
 
+insert into public.staff_security_profiles (staff_id, password_hash, must_change_password)
+select sm.id,
+       'scrypt$16384$8$1$2b5c4d6dde398b0bf4670cb892ca6caf$ed8ee9d504f41d5925f48af8789655e2e9ff0151c6e21421264e2773a962c100433428607dd4ac3dab2f35c2918c6fd96719c3bfa891f7ad2801862df5e626eb',
+       case when sm.email = 'system.admin@school-demo.example' then true else false end
+from public.staff_members sm
+where sm.email in (
+  'system.admin@school-demo.example',
+  'principal@school-demo.example',
+  'admissions@school-demo.example',
+  'clerk@school-demo.example',
+  'accounts@school-demo.example'
+)
+on conflict (staff_id) do update
+set password_hash = excluded.password_hash,
+    must_change_password = excluded.must_change_password;
+
 insert into public.academic_years (label,start_date,end_date,status,notes)
 values
  ('2025-2026',date '2025-06-01',date '2026-05-31','closed','Synthetic prior year for year-scope testing.'),
@@ -37,19 +53,19 @@ where ay.label='2026-2027'
 on conflict (academic_year_id,grade_level_id,name) do update
 set max_capacity=excluded.max_capacity,is_active=excluded.is_active;
 
-insert into public.students (first_name,last_name,date_of_birth,gender,email,phone,address_line_1,city,state,postal_code)
-select v.first_name,v.last_name,v.dob::date,v.gender,v.email,v.phone,v.address_line_1,'Bengaluru','Karnataka',v.postal_code
+insert into public.students (first_name,last_name,date_of_birth,gender,email,phone,address_line_1,city,state,postal_code,sts_number,dise_number)
+select v.first_name,v.last_name,v.dob::date,v.gender,v.email,v.phone,v.address_line_1,'Bengaluru','Karnataka',v.postal_code,v.sts_number,v.dise_number
 from (values
- ('Aarav','Sharma','2019-10-12','male','aarav.sharma@student-demo.example','9000000101','12 Demo Garden Road','560001'),
- ('Aanya','Rao','2019-06-03','female','aanya.rao@student-demo.example','9000000102','24 Sample Lake View','560002'),
- ('Rohan','Iyer','2015-09-23','male','rohan.iyer@student-demo.example','9000000103','8 Fictional Park Lane','560003'),
- ('Anika','Kulkarni','2012-11-14','female','anika.kulkarni@student-demo.example','9000000104','19 Mock Residency','560004'),
- ('Vihaan','Desai','2021-02-02','male','vihaan.desai@student-demo.example','9000000105','6 Example Cross','560005'),
- ('Myra','Shetty','2020-02-02','female','myra.shetty@student-demo.example','9000000106','31 Demo Circle','560006'),
- ('Ishaan','Verma','2018-05-17','male','ishaan.verma@student-demo.example','9000000107','14 Placeholder Street','560007'),
- ('Kiara','Joshi','2019-03-03','female','kiara.joshi@student-demo.example','9000000108','3 Sample Orchid Road','560008'),
- ('Nikhil','Bhat','2017-04-19','male','nikhil.bhat@student-demo.example','9000000109','27 Fiction Court','560009')
-) v(first_name,last_name,dob,gender,email,phone,address_line_1,postal_code)
+ ('Aarav','Sharma','2019-10-12','male','aarav.sharma@student-demo.example','9000000101','12 Demo Garden Road','560001','STS-2026-001','DISE-2901-001'),
+ ('Aanya','Rao','2019-06-03','female','aanya.rao@student-demo.example','9000000102','24 Sample Lake View','560002','STS-2026-002','DISE-2901-002'),
+ ('Rohan','Iyer','2015-09-23','male','rohan.iyer@student-demo.example','9000000103','8 Fictional Park Lane','560003','STS-2026-003','DISE-2901-003'),
+ ('Anika','Kulkarni','2012-11-14','female','anika.kulkarni@student-demo.example','9000000104','19 Mock Residency','560004','STS-2026-004','DISE-2901-004'),
+ ('Vihaan','Desai','2021-02-02','male','vihaan.desai@student-demo.example','9000000105','6 Example Cross','560005','STS-2026-005','DISE-2901-005'),
+ ('Myra','Shetty','2020-02-02','female','myra.shetty@student-demo.example','9000000106','31 Demo Circle','560006','STS-2026-006','DISE-2901-006'),
+ ('Ishaan','Verma','2018-05-17','male','ishaan.verma@student-demo.example','9000000107','14 Placeholder Street','560007','STS-2026-007','DISE-2901-007'),
+ ('Kiara','Joshi','2019-03-03','female','kiara.joshi@student-demo.example','9000000108','3 Sample Orchid Road','560008','STS-2026-008','DISE-2901-008'),
+ ('Nikhil','Bhat','2017-04-19','male','nikhil.bhat@student-demo.example','9000000109','27 Fiction Court','560009','STS-2026-009','DISE-2901-009')
+) v(first_name,last_name,dob,gender,email,phone,address_line_1,postal_code,sts_number,dise_number)
 where not exists (select 1 from public.students s where s.email=v.email);
 
 insert into public.guardians (full_name,relationship_to_student,phone,email,occupation,address_line_1,city,state,postal_code)

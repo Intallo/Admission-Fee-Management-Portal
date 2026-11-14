@@ -13,7 +13,7 @@ export async function GET(
   const correlationId = getOrCreateCorrelationId(request.headers);
 
   try {
-    const session = await requireRole(['accountant', 'principal', 'admission_officer', 'clerk']);
+    const session = await requireRole(['accountant', 'principal', 'clerk']);
 
     const receipt = await receiptsService.getReceiptById(params.id, session);
 

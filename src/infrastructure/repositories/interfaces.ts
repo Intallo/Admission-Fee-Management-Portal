@@ -8,6 +8,7 @@ export interface IIdentityRepository {
   revokeSession(sessionId: string, expiresAt: number): Promise<void>;
   recordLoginAttempt(staffId: string, success: boolean, lockedUntil?: number | null, session?: AuthenticatedUserSession): Promise<void>;
   updatePassword(staffId: string, passwordHash: string, mustChangePassword: boolean, session?: AuthenticatedUserSession): Promise<void>;
+  ensureSecurityProfile?(staffId: string, passwordHash: string, mustChangePassword?: boolean, session?: AuthenticatedUserSession): Promise<void>;
   listStaff(session?: AuthenticatedUserSession): Promise<any[]>;
   createStaff(data: any, session?: AuthenticatedUserSession): Promise<any>;
   updateStaff(staffId: string, data: any, session?: AuthenticatedUserSession): Promise<any>;

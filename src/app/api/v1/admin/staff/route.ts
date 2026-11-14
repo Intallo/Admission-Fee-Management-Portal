@@ -23,20 +23,16 @@ export async function GET(request: Request) {
       createdAt: string;
     }> = [];
 
-    try {
-      const staffMembers = await getRepositories().identity.listStaff();
-      if (staffMembers && staffMembers.length > 0) {
-        staffList = staffMembers.map((s: any) => ({
-          id: s.id,
-          fullName: s.fullName ?? s.full_name,
-          email: s.email,
-          role: s.role,
-          isActive: s.isActive ?? s.is_active,
-          createdAt: s.createdAt ?? s.created_at,
-        }));
-      }
-    } catch {
-      // Test fallback
+    const staffMembers = await getRepositories().identity.listStaff();
+    if (staffMembers && staffMembers.length > 0) {
+      staffList = staffMembers.map((s: any) => ({
+        id: s.id,
+        fullName: s.fullName ?? s.full_name,
+        email: s.email,
+        role: s.role,
+        isActive: s.isActive ?? s.is_active,
+        createdAt: s.createdAt ?? s.created_at,
+      }));
     }
 
     return NextResponse.json({ staff: staffList }, {

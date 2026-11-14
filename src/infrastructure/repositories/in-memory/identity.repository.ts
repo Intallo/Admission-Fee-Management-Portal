@@ -135,4 +135,21 @@ export class InMemoryIdentityRepository implements IIdentityRepository {
     this.staffVault.set(staffId, updated);
     return updated;
   }
+
+  async ensureSecurityProfile(
+    staffId: string,
+    passwordHash: string,
+    mustChangePassword: boolean = false,
+    _session?: AuthenticatedUserSession
+  ): Promise<void> {
+    const existing = this.securityProfiles.get(staffId);
+    this.securityProfiles.set(staffId, {
+      staffId,
+      passwordHash,
+      mustChangePassword,
+      failedLoginAttempts: 0,
+      lockedUntil: null,
+      lastLoginAt: existing?.lastLoginAt || null,
+    });
+  }
 }

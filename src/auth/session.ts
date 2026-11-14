@@ -1,7 +1,7 @@
 import 'server-only';
 import { cookies } from 'next/headers';
 import { AuthenticatedUserSession, StaffRole } from '../modules/identity-access/types';
-import { verifySessionToken, SESSION_COOKIE_NAME, ACADEMIC_YEAR_COOKIE_NAME } from '../lib/auth/token';
+import { verifySessionToken, touchSession, signSessionToken, SESSION_COOKIE_NAME, ACADEMIC_YEAR_COOKIE_NAME } from '../lib/auth/token';
 import { getRepositories } from '../infrastructure/repositories';
 import { logger } from '../lib/logger';
 
@@ -93,6 +93,26 @@ export async function getServerSession(): Promise<AuthenticatedUserSession | nul
         }
       } catch {
         // Fall back to session default
+      }
+    }
+
+    // Rolling idle-timeout refresh: extend session activity window if active after 1 minute
+    const nowMs = Date.now();
+    if (nowMs - sessionPayload.lastActivityAt > 60 * 1000) {
+      try {
+        const touched = touchSession(sessionPayload, nowMs);
+        const refreshedToken = signSessionToken(touched);
+        cookieStore.set({
+          name: SESSION_COOKIE_NAME,
+          value: refreshedToken,
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          path: '/',
+          maxAge: Math.floor((touched.expiresAt - nowMs) / 1000),
+        });
+      } catch {
+        // cookies().set() throws in read-only Server Component rendering, allowed to fail silently
       }
     }
 

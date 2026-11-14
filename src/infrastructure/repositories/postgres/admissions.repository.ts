@@ -1580,9 +1580,9 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
       student: {
         firstName: r.first_name,
         lastName: r.last_name,
-        stsNumber: r.sts_number,
+        stsNumber: r.sts_number || null,
       },
-      feeGenerated: r.fee_generated,
+      feeGenerated: Boolean(r.fee_generated),
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     }));

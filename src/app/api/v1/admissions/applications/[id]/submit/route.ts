@@ -13,7 +13,7 @@ export async function POST(
   const correlationId = getOrCreateCorrelationId(request.headers);
 
   try {
-    const session = await requireRole(['principal', 'admission_officer', 'clerk']);
+    const session = await requireRole(['admission_officer', 'clerk']);
     let body: { overrideMissingDocumentsReason?: string } = {};
     try {
       body = await request.json();

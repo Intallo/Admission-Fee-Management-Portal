@@ -135,7 +135,7 @@ describe('Phase 6: Audit Trail, Operational Dashboards, and Synthetic Demo Data 
       expect(snapshot.publicName).toBe('Aarav Sharma');
     });
 
-    it('restricts audit queries to authorized roles (Principal, SysAdmin, Accountant) (US-38)', async () => {
+    it('restricts audit queries to authorized roles (Principal, SysAdmin) (US-38)', async () => {
       // Principal can view
       await expect(
         auditReportingService.listAuditLogs({}, principalSession)
@@ -146,10 +146,10 @@ describe('Phase 6: Audit Trail, Operational Dashboards, and Synthetic Demo Data 
         auditReportingService.listAuditLogs({}, sysAdminSession)
       ).resolves.toBeDefined();
 
-      // Accountant can view
+      // Accountant is denied audit query access (US-38 / ROLE_PERMISSION_MATRIX.md)
       await expect(
         auditReportingService.listAuditLogs({}, accountantSession)
-      ).resolves.toBeDefined();
+      ).rejects.toThrow(AuthorizationError);
 
       // Admission Officer is denied audit query access
       await expect(
@@ -205,10 +205,37 @@ describe('Phase 6: Audit Trail, Operational Dashboards, and Synthetic Demo Data 
       expect(admDashboard.financials).toBeUndefined();
     });
 
-    it('denies System Administrator from viewing institutional student and business metrics', async () => {
-      await expect(
-        auditReportingService.getDashboardMetrics(currentYearId, sysAdminSession)
-      ).rejects.toThrow(AuthorizationError);
+    it('allows System Administrator to view operational metrics while redacting financial details (US-39)', async () => {
+      await seedComprehensiveSyntheticData();
+
+      const dashboard = await auditReportingService.getDashboardMetrics(
+        currentYearId,
+        sysAdminSession
+      );
+
+      expect(dashboard.academicYearId).toBe(currentYearId);
+      expect(dashboard.totalApplications).toBeGreaterThan(0);
+      expect(dashboard.totalSeatCapacity).toBeGreaterThan(0);
+      // Institutional financial figures must be strictly redacted for System Administrator
+      expect(dashboard.financials).toBeUndefined();
+    });
+
+    it('gracefully falls back to current active year when session academicYearId does not exist in store', async () => {
+      await seedComprehensiveSyntheticData();
+
+      const sessionWithMissingYear: AuthenticatedUserSession = {
+        ...principalSession,
+        activeAcademicYearId: '99999999-9999-9999-9999-999999999999',
+      };
+
+      const dashboard = await auditReportingService.getDashboardMetrics(
+        undefined,
+        sessionWithMissingYear
+      );
+
+      expect(dashboard).toBeDefined();
+      expect(dashboard.academicYearId).toBe(currentYearId);
+      expect(dashboard.academicYearLabel).toBe('2026-2027');
     });
   });
 

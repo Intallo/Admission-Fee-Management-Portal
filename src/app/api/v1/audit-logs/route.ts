@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
 
   try {
-    const session = await requireRole(['principal', 'system_admin', 'accountant', 'read_only']);
+    const session = await requireRole(['principal', 'system_admin']);
 
     const filter = {
       actorStaffId: searchParams.get('actorStaffId') || undefined,

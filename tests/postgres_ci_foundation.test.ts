@@ -141,6 +141,19 @@ describe('Milestone M8.3.1: PostgreSQL CI Foundation & Migration Verification', 
       expect(scriptContent).toContain('ON_ERROR_STOP=1');
       expect(scriptContent).toContain('psql -v ON_ERROR_STOP=1');
       expect(scriptContent).toContain('00_supabase_test_compat_bootstrap.sql');
+      expect(scriptContent).toContain('supabase/seed.sql');
+    });
+
+    it('verifies supabase/seed.sql provisions both demo staff members and corresponding security profiles', () => {
+      const seedPath = path.join(repoRoot, 'supabase', 'seed.sql');
+      expect(fs.existsSync(seedPath)).toBe(true);
+
+      const seedSql = fs.readFileSync(seedPath, 'utf-8');
+      expect(seedSql).toContain('insert into public.staff_members');
+      expect(seedSql).toContain('insert into public.staff_security_profiles');
+      expect(seedSql).toContain('system.admin@school-demo.example');
+      expect(seedSql).toContain('principal@school-demo.example');
+      expect(seedSql).toContain('scrypt$16384$8$1$');
     });
   });
 
@@ -195,10 +208,11 @@ describe('Milestone M8.3.1: PostgreSQL CI Foundation & Migration Verification', 
       expect(bootstrapSql).toContain('grant execute on function auth.jwt() to anon, authenticated, service_role');
     });
 
-    it('verifies pgcrypto and uuid-ossp extensions are requested', () => {
+    it('verifies pgcrypto and uuid-ossp extensions are requested with extensions schema layout', () => {
       const bootstrapSql = fs.readFileSync(bootstrapPath, 'utf-8');
-      expect(bootstrapSql).toContain('create extension if not exists "uuid-ossp";');
-      expect(bootstrapSql).toContain('create extension if not exists pgcrypto;');
+      expect(bootstrapSql).toContain('create schema if not exists extensions;');
+      expect(bootstrapSql).toContain('create extension if not exists "uuid-ossp" with schema extensions;');
+      expect(bootstrapSql).toContain('create extension if not exists pgcrypto with schema extensions;');
     });
   });
 

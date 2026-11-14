@@ -20,7 +20,6 @@ export async function GET(
       'accountant',
       'clerk',
       'read_only',
-      'system_admin',
     ]);
 
     const academicYearId = searchParams.get('academicYearId') || undefined;
