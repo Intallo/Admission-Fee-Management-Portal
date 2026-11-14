@@ -16,6 +16,19 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLocked, setIsLocked] = useState(false);
+  const [revocationWarning, setRevocationWarning] = useState(false);
+  const [loggedOutNotice, setLoggedOutNotice] = useState(false);
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('revocation_failed') === 'true') {
+        setRevocationWarning(true);
+      } else if (params.get('logged_out') === 'true') {
+        setLoggedOutNotice(true);
+      }
+    }
+  }, []);
 
   // First-login password change state
   const [mustChangePassword, setMustChangePassword] = useState(false);
@@ -173,6 +186,18 @@ export default function LoginPage() {
             </CardHeader>
             <form onSubmit={handleLogin}>
               <CardContent className="space-y-4 pt-5">
+                {revocationWarning && (
+                  <Alert variant="warning" title="Partial Logout Warning">
+                    You have been logged out locally and your browser session cleared. However, server-side token revocation could not be confirmed with the database. Copied tokens outside this browser may remain active until normal expiration.
+                  </Alert>
+                )}
+
+                {loggedOutNotice && !revocationWarning && (
+                  <Alert variant="info" title="Logged Out">
+                    You have been successfully and securely logged out.
+                  </Alert>
+                )}
+
                 {errorMessage && (
                   <Alert variant={isLocked ? 'danger' : 'warning'} title={isLocked ? 'Account Locked' : 'Authentication Error'}>
                     {errorMessage}

@@ -732,13 +732,26 @@ describe('Milestone M8.3.4: Transaction Boundary and Repository Correctness', ()
         }
         const gradeId = gradeRes.rows[0].id;
 
-        // Ensure staff member exists for RLS session
-        await realPool.query(
-          `INSERT INTO public.staff_members (id, email, role, full_name, is_active)
-           VALUES ($1, $2, $3, $4, true)
-           ON CONFLICT (id) DO UPDATE SET is_active = true`,
-          [principalSession.staffId, principalSession.email, principalSession.role, principalSession.fullName]
+        // Ensure staff member exists for RLS session (reuse seeded principal if present)
+        const existingStaff = await realPool.query(
+          'SELECT id, email, role, full_name FROM public.staff_members WHERE email = $1',
+          [principalSession.email]
         );
+        let activePrincipalSession = principalSession;
+        if (existingStaff.rowCount && existingStaff.rowCount > 0) {
+          activePrincipalSession = {
+            ...principalSession,
+            staffId: existingStaff.rows[0].id,
+            authUserId: existingStaff.rows[0].id,
+          };
+        } else {
+          await realPool.query(
+            `INSERT INTO public.staff_members (id, email, role, full_name, is_active)
+             VALUES ($1, $2, $3, $4, true)
+             ON CONFLICT (id) DO UPDATE SET is_active = true`,
+            [principalSession.staffId, principalSession.email, principalSession.role, principalSession.fullName]
+          );
+        }
 
         const repo = new PostgresAdmissionsRepository();
 
@@ -755,7 +768,7 @@ describe('Milestone M8.3.4: Transaction Boundary and Repository Correctness', ()
               gender: 'female',
             },
           },
-          principalSession
+          activePrincipalSession
         );
 
         // Verify returned DTO reflects committed state
@@ -771,7 +784,7 @@ describe('Milestone M8.3.4: Transaction Boundary and Repository Correctness', ()
           {
             student: { firstName: updatedName },
           },
-          principalSession
+          activePrincipalSession
         );
 
         expect(updated).toBeDefined();
@@ -780,13 +793,13 @@ describe('Milestone M8.3.4: Transaction Boundary and Repository Correctness', ()
         // Step 4: Test atomic rollback on real PostgreSQL
         let threwError = false;
         try {
-          await withTransaction(principalSession, async (client) => {
+          await withTransaction(activePrincipalSession, async (client) => {
             // Write a dummy record
             await client.query(
               `INSERT INTO public.admission_status_history (
                  id, admission_application_id, from_status, to_status, changed_by, reason, created_at
                ) VALUES ($1, $2, 'draft', 'on_hold', $3, 'Temporary Rollback Test', now())`,
-              [randomUUID(), draft.id, principalSession.staffId]
+              [randomUUID(), draft.id, activePrincipalSession.staffId]
             );
 
             // Trigger forced SQL failure

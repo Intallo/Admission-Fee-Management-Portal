@@ -11,6 +11,7 @@ import {
   StudentFeeSummaryDTO,
 } from '../../../modules/fees-ledger/types';
 import {
+  computePaymentRequestHash,
   InternalFeeAdjustment,
   InternalPaymentAllocation,
   InternalPaymentRecord,
@@ -40,7 +41,7 @@ export class InMemoryFeesLedgerRepository implements IFeesLedgerRepository {
   private adjustmentsVault = new Map<string, InternalFeeAdjustment>();
   private receiptSeq = 1;
   private duesSummaries = new Map<string, StudentFeeSummaryDTO>();
-  private paymentResultsVault = new Map<string, RecordPaymentResultDTO>();
+  private paymentResultsVault = new Map<string, { result: RecordPaymentResultDTO; requestHash: string }>();
   private receiptsRepo?: IReceiptsRepository;
   private admissionsRepo?: IAdmissionsRepository;
 
@@ -242,8 +243,15 @@ export class InMemoryFeesLedgerRepository implements IFeesLedgerRepository {
       throw new AuthorizationError('Access Denied: Only Accountants and Principal can record payments.');
     }
 
+    const requestHash = computePaymentRequestHash(params);
     if (idempotencyKey && this.paymentResultsVault.has(idempotencyKey)) {
-      return this.paymentResultsVault.get(idempotencyKey)!;
+      const stored = this.paymentResultsVault.get(idempotencyKey)!;
+      if (stored.requestHash !== requestHash) {
+        throw new ConflictError(
+          'Idempotency key mismatch: This idempotency key was previously submitted with a different payment payload.'
+        );
+      }
+      return stored.result;
     }
 
     let academicYearId = '00000000-0000-0000-0000-000000000001';
@@ -479,7 +487,7 @@ export class InMemoryFeesLedgerRepository implements IFeesLedgerRepository {
     }
 
     if (idempotencyKey) {
-      this.paymentResultsVault.set(idempotencyKey, result);
+      this.paymentResultsVault.set(idempotencyKey, { result, requestHash });
     }
 
     return result;

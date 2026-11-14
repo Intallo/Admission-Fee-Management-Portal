@@ -52,7 +52,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
     href: '/fees',
     icon: CreditCard,
     phase: 'Phase 4',
-    allowedRoles: ['principal', 'accountant'],
+    allowedRoles: ['principal', 'accountant', 'clerk'],
   },
   {
     label: 'Receipts & Dues',

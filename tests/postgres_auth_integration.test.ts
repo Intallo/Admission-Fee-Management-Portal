@@ -118,8 +118,14 @@ describe('PostgreSQL-Backed Authentication Integration', () => {
   it('verifies actor signing context matches private.current_actor_role() in PostgreSQL', async () => {
     if (!isPgAvailable || !pgPool) return;
 
-    const staffId = '11111111-1111-1111-1111-111111111111';
-    const role = 'principal';
+    // Retrieve the actual seeded principal staff ID from the database
+    const staffRes = await pgPool.query(
+      "SELECT id, role, email, full_name FROM public.staff_members WHERE email = 'principal@school-demo.example' LIMIT 1"
+    );
+    expect(staffRes.rows.length).toBeGreaterThan(0);
+    const staff = staffRes.rows[0];
+    const staffId = staff.id;
+    const role = staff.role;
 
     // Verify actor signature generation produces valid hex string
     const signature = generateActorSignature(staffId, role);
@@ -129,9 +135,9 @@ describe('PostgreSQL-Backed Authentication Integration', () => {
     const testSession: AuthenticatedUserSession = {
       staffId,
       authUserId: staffId,
-      email: 'principal@school-demo.example',
-      fullName: 'Principal Sharma',
-      role: 'principal',
+      email: staff.email,
+      fullName: staff.full_name,
+      role: staff.role,
       isActive: true,
       activeAcademicYearId: '00000000-0000-0000-0000-000000000001',
       activeAcademicYearLabel: '2026-2027',

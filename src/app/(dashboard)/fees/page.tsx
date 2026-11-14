@@ -134,6 +134,7 @@ export default function FeesPage() {
         const data = await res.json();
         setStudentDues(data);
         setPayerName(data.studentName || '');
+        setPaymentIdempotencyKey('');
         // Initialize default empty allocations
         const initialAllocs: { [id: string]: string } = {};
         for (const line of data.lines || []) {
@@ -242,7 +243,10 @@ export default function FeesPage() {
         await handleSearchDues();
       } else {
         const err = await res.json();
-        setErrorMessage(err.message || 'Payment recording failed.');
+        if (res.status === 409) {
+          setPaymentIdempotencyKey('');
+        }
+        setErrorMessage(err.detail || err.message || 'Payment recording failed.');
       }
     } catch {
       setErrorMessage('Network or server error while recording payment.');

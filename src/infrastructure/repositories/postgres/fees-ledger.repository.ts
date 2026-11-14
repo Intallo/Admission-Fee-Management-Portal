@@ -25,8 +25,29 @@ import {
   subtractInr,
 } from '../../../lib/money/inr';
 import { DecimalInrString, ReceiptNumber, toDecimalInrString } from '../../../modules/shared/types';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { logger } from '../../../lib/logger';
+
+export function computePaymentRequestHash(params: RecordPaymentRequestDTO): string {
+  const normalizedAllocations = [...params.allocations]
+    .map((a) => ({
+      assessmentLineId: a.assessmentLineId,
+      amount: formatInr(a.amount),
+    }))
+    .sort((a, b) => a.assessmentLineId.localeCompare(b.assessmentLineId));
+
+  const canonical = {
+    studentAcademicRecordId: params.studentAcademicRecordId,
+    category: params.category,
+    amount: formatInr(params.amount),
+    method: params.method,
+    payerName: params.payerName?.trim() || '',
+    referenceNumber: params.referenceNumber?.trim() || null,
+    allocations: normalizedAllocations,
+  };
+
+  return createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
+}
 
 export interface InternalPaymentRecord {
   id: string;
@@ -181,11 +202,13 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
 
   private async findPaymentByIdempotencyKey(
     client: PoolClient,
-    idempotencyKey: string
+    idempotencyKey: string,
+    expectedHash: string,
+    params?: RecordPaymentRequestDTO
   ): Promise<RecordPaymentResultDTO | null> {
     const existRes = await client.query(
       `select p.id, r.id as receipt_id, r.receipt_number, p.category, p.amount, p.method, p.payer_name,
-              r.issued_at, r.rendered_snapshot
+              p.student_academic_record_id, p.idempotency_payload_hash, r.issued_at, r.rendered_snapshot
        from public.payments p
        join public.receipts r on r.payment_id = p.id
        where p.idempotency_key = $1`,
@@ -193,6 +216,27 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
     );
     if (existRes.rowCount && existRes.rowCount > 0) {
       const row = existRes.rows[0];
+
+      // Bind idempotency key to original request payload: reject conflicting payloads with HTTP 409
+      if (row.idempotency_payload_hash) {
+        if (row.idempotency_payload_hash !== expectedHash) {
+          throw new ConflictError(
+            'Idempotency key mismatch: This idempotency key was previously submitted with a different payment payload.'
+          );
+        }
+      } else if (params) {
+        if (
+          row.student_academic_record_id !== params.studentAcademicRecordId ||
+          formatInr(row.amount) !== formatInr(params.amount) ||
+          row.category !== params.category ||
+          row.method !== params.method
+        ) {
+          throw new ConflictError(
+            'Idempotency key mismatch: This idempotency key was previously submitted with a different payment payload.'
+          );
+        }
+      }
+
       return {
         paymentId: row.id,
         receiptId: row.receipt_id,
@@ -233,9 +277,11 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
         throw new AuthorizationError(`Role "${session.role}" is not authorized to record payments.`);
       }
 
+      const requestHash = computePaymentRequestHash(params);
+
       // 2. Idempotency Pre-Check: if idempotency key was supplied, check if payment already recorded
       if (idempotencyKey) {
-        const existing = await this.findPaymentByIdempotencyKey(client, idempotencyKey);
+        const existing = await this.findPaymentByIdempotencyKey(client, idempotencyKey, requestHash, params);
         if (existing) {
           return existing;
         }
@@ -249,7 +295,7 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
 
       // Re-check idempotency key after acquiring row lock to avoid race conditions
       if (idempotencyKey) {
-        const existingLocked = await this.findPaymentByIdempotencyKey(client, idempotencyKey);
+        const existingLocked = await this.findPaymentByIdempotencyKey(client, idempotencyKey, requestHash, params);
         if (existingLocked) {
           return existingLocked;
         }
@@ -323,8 +369,8 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
             `insert into public.payments (
                id, student_academic_record_id, category, amount, currency, method,
                payer_name, reference_number, notes, transaction_type, transaction_date,
-               idempotency_key, recorded_by, created_at
-             ) values ($1, $2, $3, $4, 'INR', $5, $6, $7, $8, 'standard', $9, $10, $11, $12)`,
+               idempotency_key, idempotency_payload_hash, recorded_by, created_at
+             ) values ($1, $2, $3, $4, 'INR', $5, $6, $7, $8, 'standard', $9, $10, $11, $12, $13)`,
             [
               paymentId,
               params.studentAcademicRecordId,
@@ -335,7 +381,8 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
               params.referenceNumber || null,
               (params as any).notes || null,
               todayDate,
-              idempotencyKey || null,
+              idempotencyKey,
+              requestHash,
               session.staffId,
               nowIso,
             ]
@@ -344,7 +391,12 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
         } catch (insertErr: any) {
           if (insertErr.code === '23505' || insertErr.message?.includes('idempotency')) {
             await client.query('ROLLBACK TO SAVEPOINT insert_payment');
-            const existingConflict = await this.findPaymentByIdempotencyKey(client, idempotencyKey);
+            const existingConflict = await this.findPaymentByIdempotencyKey(
+              client,
+              idempotencyKey,
+              requestHash,
+              params
+            );
             if (existingConflict) {
               return existingConflict;
             }
@@ -356,8 +408,8 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
           `insert into public.payments (
              id, student_academic_record_id, category, amount, currency, method,
              payer_name, reference_number, notes, transaction_type, transaction_date,
-             idempotency_key, recorded_by, created_at
-           ) values ($1, $2, $3, $4, 'INR', $5, $6, $7, $8, 'standard', $9, $10, $11, $12)`,
+             idempotency_key, idempotency_payload_hash, recorded_by, created_at
+           ) values ($1, $2, $3, $4, 'INR', $5, $6, $7, $8, 'standard', $9, $10, $11, $12, $13)`,
           [
             paymentId,
             params.studentAcademicRecordId,
@@ -368,6 +420,7 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
             params.referenceNumber || null,
             (params as any).notes || null,
             todayDate,
+            null,
             null,
             session.staffId,
             nowIso,

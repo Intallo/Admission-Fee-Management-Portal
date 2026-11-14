@@ -13,12 +13,14 @@ const nextConfig = {
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
       "font-src 'self'",
+      "object-src 'none'",
       isProd
         ? "connect-src 'self' https://*.supabase.co"
         : "connect-src 'self' http://127.0.0.1:* http://localhost:* https://*.supabase.co",
       "frame-ancestors 'none'",
       "form-action 'self'",
       "base-uri 'self'",
+      ...(isProd ? ["upgrade-insecure-requests", "block-all-mixed-content"] : []),
     ];
 
     return [

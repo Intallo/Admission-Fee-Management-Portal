@@ -251,7 +251,8 @@ create trigger trg_sync_certificate_version_aliases
 
 alter table public.payments
   add column if not exists category text default 'tuition',
-  add column if not exists idempotency_key text;
+  add column if not exists idempotency_key text,
+  add column if not exists idempotency_payload_hash text;
 
 create unique index if not exists payments_idempotency_key_idx
   on public.payments (idempotency_key)

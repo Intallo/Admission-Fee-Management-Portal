@@ -87,10 +87,25 @@ export function AppHeader({
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
+    let revocationFailed = false;
     try {
-      await fetch('/api/v1/auth/logout', { method: 'POST' });
+      const res = await fetch('/api/v1/auth/logout', { method: 'POST' });
+      if (!res.ok) {
+        revocationFailed = true;
+      } else {
+        const data = await res.json().catch(() => ({}));
+        if (data.success === false) {
+          revocationFailed = true;
+        }
+      }
+    } catch {
+      revocationFailed = true;
     } finally {
-      router.push('/login');
+      if (revocationFailed) {
+        router.push('/login?revocation_failed=true');
+      } else {
+        router.push('/login?logged_out=true');
+      }
       router.refresh();
     }
   };
