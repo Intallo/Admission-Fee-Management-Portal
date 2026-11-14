@@ -361,14 +361,20 @@ describe('CTO Directive Phase 8.2: Real PostgreSQL Integration Test Suite', () =
                 reason: params[2],
               });
             } else {
+              const generatedId = String(dbTables.audit_logs.length + 1);
               dbTables.audit_logs.push({
-                id: params[0],
-                actor_staff_id: params[1],
-                action: params[2],
-                entity_type: params[3],
-                entity_id: params[4],
-                outcome: params[7] || 'SUCCESS',
+                id: generatedId,
+                actor_staff_id: params[0],
+                action: params[1],
+                entity_type: params[2],
+                entity_id: params[3],
+                before_snapshot: params[4],
+                after_snapshot: params[5],
+                outcome: params[6] || 'SUCCESS',
+                reason: params[7],
+                created_at: params[8],
               });
+              return { rows: [{ id: generatedId }], rowCount: 1 };
             }
             return { rows: [], rowCount: 1 };
           }
@@ -453,8 +459,11 @@ describe('CTO Directive Phase 8.2: Real PostgreSQL Integration Test Suite', () =
                 action: a.action,
                 entity_type: a.entity_type,
                 entity_id: a.entity_id,
+                before_snapshot: a.before_snapshot,
+                after_snapshot: a.after_snapshot,
                 outcome: a.outcome,
-                created_at: new Date().toISOString(),
+                reason: a.reason,
+                created_at: a.created_at || new Date().toISOString(),
               })),
               rowCount: dbTables.audit_logs.length,
             };

@@ -818,10 +818,9 @@ describe('Milestone M8.3.4: Transaction Boundary and Repository Correctness', ()
         );
         expect(historyCheck.rowCount).toBe(0);
 
-        // Cleanup test data
-        await realPool.query('DELETE FROM public.admission_status_history WHERE admission_application_id = $1', [draft.id]);
-        await realPool.query('DELETE FROM public.admission_applications WHERE id = $1', [draft.id]);
-        await realPool.query('DELETE FROM public.students WHERE id = $1', [draft.studentId]);
+        // Preserve append-only admission history. This test uses unique generated IDs
+        // and runs against a disposable CI database, so cleanup must not bypass the
+        // production immutability trigger on admission_status_history.
       } finally {
         await realPool.end();
         setPostgresPoolForTesting(null);

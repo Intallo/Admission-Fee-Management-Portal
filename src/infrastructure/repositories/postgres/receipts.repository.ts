@@ -309,9 +309,9 @@ export class PostgresReceiptsRepository implements IReceiptsRepository {
 
       // Audit log
       await client.query(
-        `insert into public.audit_logs (id, actor_staff_id, action, entity_type, entity_id, outcome, reason, created_at)
-         values ($1, $2, 'FINAL_RECEIPT_ISSUED', 'receipts', $3, 'SUCCESS', $4, $5)`,
-        [randomUUID(), session.staffId, finalId, `Issued final fees receipt ${finalNumber} totaling ₹${total}`, nowIso]
+        `insert into public.audit_logs (actor_staff_id, action, entity_type, entity_id, outcome, reason, created_at)
+         values ($1, 'FINAL_RECEIPT_ISSUED', 'receipts', $2, 'SUCCESS', $3, $4)`,
+        [session.staffId, finalId, `Issued final fees receipt ${finalNumber} totaling ₹${total}`, nowIso]
       );
 
       return {
@@ -358,9 +358,9 @@ export class PostgresReceiptsRepository implements IReceiptsRepository {
 
       // Audit log
       await client.query(
-        `insert into public.audit_logs (id, actor_staff_id, action, entity_type, entity_id, outcome, reason, created_at)
-         values ($1, $2, 'RECEIPT_REPRINTED', 'receipts', $3, 'SUCCESS', $4, $5)`,
-        [randomUUID(), session.staffId, receiptId, `Reprint #${nextCount} reason: ${reason}`, nowIso]
+        `insert into public.audit_logs (actor_staff_id, action, entity_type, entity_id, outcome, reason, created_at)
+         values ($1, 'RECEIPT_REPRINTED', 'receipts', $2, 'SUCCESS', $3, $4)`,
+        [session.staffId, receiptId, `Reprint #${nextCount} reason: ${reason}`, nowIso]
       );
 
       const snapshot = typeof rec.rendered_snapshot === 'string'

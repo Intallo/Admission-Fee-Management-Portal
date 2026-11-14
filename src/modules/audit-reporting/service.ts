@@ -149,7 +149,7 @@ export class AuditReportingService {
     };
 
     if (this.isPostgres()) {
-      await this.repo.recordAuditEvent({
+      const persistedEntry = await this.repo.recordAuditEvent({
         action: entry.action,
         actorStaffId: entry.actorStaffId,
         actorRole: entry.actorRole,
@@ -161,6 +161,9 @@ export class AuditReportingService {
         afterSnapshot: (entry.afterSnapshot as any) ?? undefined,
         createdAt: entry.createdAt,
       });
+      if (persistedEntry?.id !== undefined && persistedEntry?.id !== null) {
+        entry.id = String(persistedEntry.id);
+      }
 
       logger.info(`Audit Event: ${entry.action}`, {
         actorStaffId: entry.actorStaffId,

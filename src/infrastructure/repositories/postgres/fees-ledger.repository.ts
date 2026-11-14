@@ -531,10 +531,9 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
 
       // 11. Insert immutable audit event
       await client.query(
-        `insert into public.audit_logs (id, actor_staff_id, action, entity_type, entity_id, outcome, reason, created_at)
-         values ($1, $2, 'PAYMENT_RECORDED', 'payments', $3, 'SUCCESS', $4, $5)`,
+        `insert into public.audit_logs (actor_staff_id, action, entity_type, entity_id, outcome, reason, created_at)
+         values ($1, 'PAYMENT_RECORDED', 'payments', $2, 'SUCCESS', $3, $4)`,
         [
-          randomUUID(),
           session.staffId,
           paymentId,
           `Recorded payment of ₹${params.amount} under category ${params.category} with receipt ${receiptNumber}`,
@@ -646,9 +645,9 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
 
       // Audit event
       await client.query(
-        `insert into public.audit_logs (id, actor_staff_id, action, entity_type, entity_id, outcome, reason, created_at)
-         values ($1, $2, 'FEE_ADJUSTMENT_APPROVED', 'fee_adjustments', $3, 'SUCCESS', $4, $5)`,
-        [randomUUID(), session.staffId, adjustmentId, `Approved ${adj.adjustment_type} of ₹${formatInr(adj.amount)}`, nowIso]
+        `insert into public.audit_logs (actor_staff_id, action, entity_type, entity_id, outcome, reason, created_at)
+         values ($1, 'FEE_ADJUSTMENT_APPROVED', 'fee_adjustments', $2, 'SUCCESS', $3, $4)`,
+        [session.staffId, adjustmentId, `Approved ${adj.adjustment_type} of ₹${formatInr(adj.amount)}`, nowIso]
       );
 
       return {
@@ -724,18 +723,13 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
         ]
       );
 
-      const auditLogId = randomUUID();
-      await client.query(
-        `insert into public.audit_logs (id, actor_staff_id, action, entity_type, entity_id, outcome, reason, created_at)
-         values ($1, $2, 'PAYMENT_REVERSED', 'payments', $3, 'SUCCESS', $4, $5)`,
-        [
-          auditLogId,
-          session.staffId,
-          reversalId,
-          reason,
-          nowIso,
-        ]
+      const auditLogResult = await client.query(
+        `insert into public.audit_logs (actor_staff_id, action, entity_type, entity_id, outcome, reason, created_at)
+         values ($1, 'PAYMENT_REVERSED', 'payments', $2, 'SUCCESS', $3, $4)
+         returning id`,
+        [session.staffId, reversalId, reason, nowIso]
       );
+      const auditLogId = String(auditLogResult.rows[0].id);
 
       return {
         reversalPaymentId: reversalId,

@@ -557,9 +557,9 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
 
       // 7. Audit log
       await client.query(
-        `insert into public.audit_logs (id, actor_staff_id, action, entity_type, entity_id, outcome, reason, created_at)
-         values ($1, $2, 'ADMISSION_SUBMITTED', 'admission_applications', $3, 'SUCCESS', $4, $5)`,
-        [randomUUID(), actualSession.staffId, applicationId, historyReason, nowIso]
+        `insert into public.audit_logs (actor_staff_id, action, entity_type, entity_id, outcome, reason, created_at)
+         values ($1, 'ADMISSION_SUBMITTED', 'admission_applications', $2, 'SUCCESS', $3, $4)`,
+        [actualSession.staffId, applicationId, historyReason, nowIso]
       );
 
       return this.getApplicationById(applicationId, actualSession, client);
@@ -644,9 +644,9 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
       );
 
       await client.query(
-        `insert into public.audit_logs (id, actor_staff_id, action, entity_type, entity_id, outcome, reason, created_at)
-         values ($1, $2, 'ADMISSION_REVIEWED', 'admission_applications', $3, 'SUCCESS', $4, $5)`,
-        [randomUUID(), session.staffId, applicationId, `Application transitioned from ${fromStatus} to ${toStatus}: ${reasonText}`, nowIso]
+        `insert into public.audit_logs (actor_staff_id, action, entity_type, entity_id, outcome, reason, created_at)
+         values ($1, 'ADMISSION_REVIEWED', 'admission_applications', $2, 'SUCCESS', $3, $4)`,
+        [session.staffId, applicationId, `Application transitioned from ${fromStatus} to ${toStatus}: ${reasonText}`, nowIso]
       );
 
       return this.getApplicationById(applicationId, session, client);
@@ -712,9 +712,9 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
       );
 
       await client.query(
-        `insert into public.audit_logs (id, actor_staff_id, action, entity_type, entity_id, outcome, reason, created_at)
-         values ($1, $2, 'ADMISSION_REJECTED', 'admission_applications', $3, 'SUCCESS', $4, $5)`,
-        [randomUUID(), session.staffId, applicationId, `Application rejected by Principal: ${reason}`, nowIso]
+        `insert into public.audit_logs (actor_staff_id, action, entity_type, entity_id, outcome, reason, created_at)
+         values ($1, 'ADMISSION_REJECTED', 'admission_applications', $2, 'SUCCESS', $3, $4)`,
+        [session.staffId, applicationId, `Application rejected by Principal: ${reason}`, nowIso]
       );
 
       return this.getApplicationById(applicationId, session, client);
@@ -1310,9 +1310,9 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
       // 11. Audit log
       await client.query(
         `insert into public.audit_logs (
-           id, actor_staff_id, action, entity_type, entity_id, outcome, reason, created_at
-         ) values ($1, $2, 'ADMISSION_APPROVED', 'admission_applications', $3, 'SUCCESS', $4, $5)`,
-        [randomUUID(), session.staffId, applicationId, `Principal approved admission for student ${app.student_id} as ${admissionNumber}`, nowIso]
+           actor_staff_id, action, entity_type, entity_id, outcome, reason, created_at
+         ) values ($1, 'ADMISSION_APPROVED', 'admission_applications', $2, 'SUCCESS', $3, $4)`,
+        [session.staffId, applicationId, `Principal approved admission for student ${app.student_id} as ${admissionNumber}`, nowIso]
       );
 
       return {

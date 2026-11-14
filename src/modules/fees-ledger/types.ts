@@ -86,5 +86,5 @@ export interface ReversePaymentResultDTO {
   reversalAmountInr: DecimalInrString;
   reversedBy: UUID;
   reversedAt: IsoTimestampString;
-  auditLogId: UUID;
+  auditLogId: string;
 }

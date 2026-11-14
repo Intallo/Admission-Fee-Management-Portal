@@ -3,23 +3,21 @@ import { query } from '../../db/postgres-pool';
 import { PoolClient } from 'pg';
 import { AuthenticatedUserSession } from '../../../modules/identity-access/types';
 import { AuditLogEntryDTO } from '../../../modules/audit-reporting/types';
-import { randomUUID } from 'crypto';
 
 export class PostgresAuditRepository implements IAuditRepository {
-  async logAction(
+  private async insertAuditLog(
     entry: any,
     session?: AuthenticatedUserSession,
     existingClient?: PoolClient
-  ): Promise<void> {
-    const id = entry.id || randomUUID();
+  ): Promise<string | undefined> {
     const nowIso = entry.createdAt || new Date().toISOString();
 
     const sql = `insert into public.audit_logs (
-         id, actor_staff_id, action, entity_type, entity_id,
-         before_state, after_state, outcome, reason, created_at
-       ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`;
+         actor_staff_id, action, entity_type, entity_id,
+         before_snapshot, after_snapshot, outcome, reason, created_at
+       ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       returning id`;
     const params = [
-      id,
       entry.actorStaffId || session?.staffId || null,
       entry.action,
       entry.entityType || null,
@@ -31,11 +29,19 @@ export class PostgresAuditRepository implements IAuditRepository {
       nowIso,
     ];
 
-    if (existingClient) {
-      await existingClient.query(sql, params);
-    } else {
-      await query(sql, params, session as any);
-    }
+    const result = existingClient
+      ? await existingClient.query(sql, params)
+      : await query(sql, params, session as any);
+    const generatedId = result.rows[0]?.id;
+    return generatedId === undefined || generatedId === null ? undefined : String(generatedId);
+  }
+
+  async logAction(
+    entry: any,
+    session?: AuthenticatedUserSession,
+    existingClient?: PoolClient
+  ): Promise<void> {
+    await this.insertAuditLog(entry, session, existingClient);
   }
 
   async recordAuditEvent(
@@ -43,8 +49,8 @@ export class PostgresAuditRepository implements IAuditRepository {
     session?: AuthenticatedUserSession,
     existingClient?: PoolClient
   ): Promise<any> {
-    await this.logAction(input, session, existingClient);
-    return input;
+    const id = await this.insertAuditLog(input, session, existingClient);
+    return id === undefined ? { ...input } : { ...input, id };
   }
 
   async getLogs(
@@ -100,16 +106,22 @@ export class PostgresAuditRepository implements IAuditRepository {
       [...params, limit, offset]
     );
 
+    const parseSnapshot = (value: unknown): Record<string, unknown> | null => {
+      if (value === null || value === undefined) return null;
+      if (typeof value === 'string') return JSON.parse(value) as Record<string, unknown> | null;
+      return value as Record<string, unknown>;
+    };
+
     const data: AuditLogEntryDTO[] = listRes.rows.map((r: any) => ({
-      id: r.id,
+      id: String(r.id),
       actorStaffId: r.actor_staff_id,
       actorName: r.actor_name || 'System / Batch Job',
       actorRole: r.actor_role || 'system',
       action: r.action,
       entityType: r.entity_type,
       entityId: r.entity_id,
-      beforeSnapshot: r.before_state ? JSON.parse(r.before_state) : null,
-      afterSnapshot: r.after_state ? JSON.parse(r.after_state) : null,
+      beforeSnapshot: parseSnapshot(r.before_snapshot),
+      afterSnapshot: parseSnapshot(r.after_snapshot),
       outcome: (r.outcome || 'success') as 'success' | 'failure',
       reason: r.reason,
       createdAt: r.created_at,

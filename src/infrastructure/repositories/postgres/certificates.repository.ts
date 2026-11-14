@@ -368,9 +368,9 @@ export class PostgresCertificatesRepository implements ICertificatesRepository {
       // 5. Append audit event to public.audit_logs
       await client.query(
         `insert into public.audit_logs (
-           id, actor_staff_id, action, entity_type, entity_id, outcome, reason, created_at
-         ) values ($1, $2, 'CERTIFICATE_ISSUED', 'student_year_certificates', $3, 'SUCCESS', $4, $5)`,
-        [randomUUID(), session.staffId, certificateId, `Issued TC ${tcNumber}`, nowIso]
+           actor_staff_id, action, entity_type, entity_id, outcome, reason, created_at
+         ) values ($1, 'CERTIFICATE_ISSUED', 'student_year_certificates', $2, 'SUCCESS', $3, $4)`,
+        [session.staffId, certificateId, `Issued TC ${tcNumber}`, nowIso]
       );
 
       const updated = await client.query(`select * from public.student_year_certificates where id = $1`, [certificateId]);
@@ -416,9 +416,9 @@ export class PostgresCertificatesRepository implements ICertificatesRepository {
 
       // Append audit event
       await client.query(
-        `insert into public.audit_logs (id, actor_staff_id, action, entity_type, entity_id, outcome, reason, created_at)
-         values ($1, $2, 'CERTIFICATE_REPRINTED', 'student_year_certificates', $3, 'SUCCESS', $4, $5)`,
-        [randomUUID(), session.staffId, certificateId, `Reprint #${newCount} reason: ${reason}`, nowIso]
+        `insert into public.audit_logs (actor_staff_id, action, entity_type, entity_id, outcome, reason, created_at)
+         values ($1, 'CERTIFICATE_REPRINTED', 'student_year_certificates', $2, 'SUCCESS', $3, $4)`,
+        [session.staffId, certificateId, `Reprint #${newCount} reason: ${reason}`, nowIso]
       );
 
       const updated = await client.query(`select * from public.student_year_certificates where id = $1`, [certificateId]);
