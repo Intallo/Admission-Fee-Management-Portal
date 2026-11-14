@@ -179,6 +179,39 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
     }, existingClient);
   }
 
+  private async findPaymentByIdempotencyKey(
+    client: PoolClient,
+    idempotencyKey: string
+  ): Promise<RecordPaymentResultDTO | null> {
+    const existRes = await client.query(
+      `select p.id, r.id as receipt_id, r.receipt_number, p.category, p.amount, p.method, p.payer_name,
+              r.issued_at, r.rendered_snapshot
+       from public.payments p
+       join public.receipts r on r.payment_id = p.id
+       where p.idempotency_key = $1`,
+      [idempotencyKey]
+    );
+    if (existRes.rowCount && existRes.rowCount > 0) {
+      const row = existRes.rows[0];
+      return {
+        paymentId: row.id,
+        receiptId: row.receipt_id,
+        receiptNumber: row.receipt_number,
+        category: row.category,
+        amountInr: formatInr(row.amount),
+        amountInWords: amountInWordsInr(row.amount),
+        method: row.method,
+        payerName: row.payer_name,
+        receivedAt: row.issued_at,
+        renderedSnapshot:
+          typeof row.rendered_snapshot === 'string'
+            ? JSON.parse(row.rendered_snapshot)
+            : row.rendered_snapshot,
+      };
+    }
+    return null;
+  }
+
   async recordPayment(
     params: RecordPaymentRequestDTO,
     idempotencyKey?: string,
@@ -200,30 +233,11 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
         throw new AuthorizationError(`Role "${session.role}" is not authorized to record payments.`);
       }
 
-      // 2. Idempotency Check: if idempotency key was supplied, check if payment already recorded
+      // 2. Idempotency Pre-Check: if idempotency key was supplied, check if payment already recorded
       if (idempotencyKey) {
-        const existRes = await client.query(
-          `select p.id, r.id as receipt_id, r.receipt_number, p.category, p.amount, p.method, p.payer_name,
-                  r.issued_at, r.rendered_snapshot
-           from public.payments p
-           join public.receipts r on r.payment_id = p.id
-           where p.idempotency_key = $1`,
-          [idempotencyKey]
-        );
-        if (existRes.rowCount && existRes.rowCount > 0) {
-          const row = existRes.rows[0];
-          return {
-            paymentId: row.id,
-            receiptId: row.receipt_id,
-            receiptNumber: row.receipt_number,
-            category: row.category,
-            amountInr: formatInr(row.amount),
-            amountInWords: amountInWordsInr(row.amount),
-            method: row.method,
-            payerName: row.payer_name,
-            receivedAt: row.issued_at,
-            renderedSnapshot: typeof row.rendered_snapshot === 'string' ? JSON.parse(row.rendered_snapshot) : row.rendered_snapshot,
-          };
+        const existing = await this.findPaymentByIdempotencyKey(client, idempotencyKey);
+        if (existing) {
+          return existing;
         }
       }
 
@@ -232,6 +246,14 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
         `select id from public.student_fee_assessments where student_academic_record_id = $1 for update`,
         [params.studentAcademicRecordId]
       );
+
+      // Re-check idempotency key after acquiring row lock to avoid race conditions
+      if (idempotencyKey) {
+        const existingLocked = await this.findPaymentByIdempotencyKey(client, idempotencyKey);
+        if (existingLocked) {
+          return existingLocked;
+        }
+      }
 
       const sarRes = await client.query(
         `select academic_year_id from public.student_academic_records where id = $1`,
@@ -294,27 +316,64 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
       const nowIso = new Date().toISOString();
       const todayDate = nowIso.slice(0, 10);
 
-      await client.query(
-        `insert into public.payments (
-           id, student_academic_record_id, category, amount, currency, method,
-           payer_name, reference_number, notes, transaction_type, transaction_date,
-           idempotency_key, recorded_by, created_at
-         ) values ($1, $2, $3, $4, 'INR', $5, $6, $7, $8, 'standard', $9, $10, $11, $12)`,
-        [
-          paymentId,
-          params.studentAcademicRecordId,
-          params.category,
-          formatInr(params.amount),
-          params.method,
-          params.payerName,
-          params.referenceNumber || null,
-          (params as any).notes || null,
-          todayDate,
-          idempotencyKey || null,
-          session.staffId,
-          nowIso,
-        ]
-      );
+      if (idempotencyKey) {
+        await client.query('SAVEPOINT insert_payment');
+        try {
+          await client.query(
+            `insert into public.payments (
+               id, student_academic_record_id, category, amount, currency, method,
+               payer_name, reference_number, notes, transaction_type, transaction_date,
+               idempotency_key, recorded_by, created_at
+             ) values ($1, $2, $3, $4, 'INR', $5, $6, $7, $8, 'standard', $9, $10, $11, $12)`,
+            [
+              paymentId,
+              params.studentAcademicRecordId,
+              params.category,
+              formatInr(params.amount),
+              params.method,
+              params.payerName,
+              params.referenceNumber || null,
+              (params as any).notes || null,
+              todayDate,
+              idempotencyKey || null,
+              session.staffId,
+              nowIso,
+            ]
+          );
+          await client.query('RELEASE SAVEPOINT insert_payment');
+        } catch (insertErr: any) {
+          if (insertErr.code === '23505' || insertErr.message?.includes('idempotency')) {
+            await client.query('ROLLBACK TO SAVEPOINT insert_payment');
+            const existingConflict = await this.findPaymentByIdempotencyKey(client, idempotencyKey);
+            if (existingConflict) {
+              return existingConflict;
+            }
+          }
+          throw insertErr;
+        }
+      } else {
+        await client.query(
+          `insert into public.payments (
+             id, student_academic_record_id, category, amount, currency, method,
+             payer_name, reference_number, notes, transaction_type, transaction_date,
+             idempotency_key, recorded_by, created_at
+           ) values ($1, $2, $3, $4, 'INR', $5, $6, $7, $8, 'standard', $9, $10, $11, $12)`,
+          [
+            paymentId,
+            params.studentAcademicRecordId,
+            params.category,
+            formatInr(params.amount),
+            params.method,
+            params.payerName,
+            params.referenceNumber || null,
+            (params as any).notes || null,
+            todayDate,
+            null,
+            session.staffId,
+            nowIso,
+          ]
+        );
+      }
 
       // 8. Insert allocations
       for (const alloc of params.allocations) {

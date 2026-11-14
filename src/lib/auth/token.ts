@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from 'crypto';
 import { StaffRole } from '../../modules/identity-access/types';
+import { KNOWN_INSECURE_SECRETS } from '../env';
 
 export const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes per US-01 AC4
 export const MAX_SESSION_LIFETIME_MS = 8 * 60 * 60 * 1000; // 8 hours absolute max
@@ -39,6 +40,11 @@ export function getSessionSecret(): string {
   if (secret.length < 32) {
     throw new Error(
       '[SECURITY VIOLATION] SESSION_SECRET is too short. It must contain at least 32 cryptographically secure characters.'
+    );
+  }
+  if (process.env.NODE_ENV === 'production' && KNOWN_INSECURE_SECRETS.includes(secret)) {
+    throw new Error(
+      '[SECURITY VIOLATION] Insecure or example SESSION_SECRET detected in production. Generate a dedicated cryptographically secure secret (e.g. openssl rand -hex 32).'
     );
   }
   return secret;

@@ -57,14 +57,68 @@ set dob = coalesce(dob, date_of_birth),
 create or replace function public.sync_student_column_aliases()
 returns trigger language plpgsql as $$
 begin
-  new.dob := coalesce(new.dob, new.date_of_birth);
-  new.date_of_birth := coalesce(new.date_of_birth, new.dob);
-  new.address_line1 := coalesce(new.address_line1, new.address_line_1);
-  new.address_line_1 := coalesce(new.address_line_1, new.address_line1);
-  new.address_line2 := coalesce(new.address_line2, new.address_line_2);
-  new.address_line_2 := coalesce(new.address_line_2, new.address_line2);
-  new.pincode := coalesce(new.pincode, new.postal_code);
-  new.postal_code := coalesce(new.postal_code, new.pincode);
+  if (tg_op = 'INSERT') then
+    -- Precedence: canonical columns take precedence over alias columns if both provided
+    if new.date_of_birth is not null then
+      new.dob := new.date_of_birth;
+    elsif new.dob is not null then
+      new.date_of_birth := new.dob;
+    end if;
+
+    if new.address_line_1 is not null then
+      new.address_line1 := new.address_line_1;
+    elsif new.address_line1 is not null then
+      new.address_line_1 := new.address_line1;
+    end if;
+
+    if new.address_line_2 is not null then
+      new.address_line2 := new.address_line_2;
+    elsif new.address_line2 is not null then
+      new.address_line_2 := new.address_line2;
+    end if;
+
+    if new.postal_code is not null then
+      new.pincode := new.postal_code;
+    elsif new.pincode is not null then
+      new.postal_code := new.pincode;
+    end if;
+  elsif (tg_op = 'UPDATE') then
+    -- dob / date_of_birth synchronization
+    if (new.date_of_birth is distinct from old.date_of_birth) and (new.dob is not distinct from old.dob) then
+      new.dob := new.date_of_birth;
+    elsif (new.dob is distinct from old.dob) and (new.date_of_birth is not distinct from old.date_of_birth) then
+      new.date_of_birth := new.dob;
+    elsif (new.date_of_birth is distinct from old.date_of_birth) and (new.dob is distinct from old.dob) then
+      new.dob := new.date_of_birth;
+    end if;
+
+    -- address_line1 / address_line_1 synchronization
+    if (new.address_line_1 is distinct from old.address_line_1) and (new.address_line1 is not distinct from old.address_line1) then
+      new.address_line1 := new.address_line_1;
+    elsif (new.address_line1 is distinct from old.address_line1) and (new.address_line_1 is not distinct from old.address_line_1) then
+      new.address_line_1 := new.address_line1;
+    elsif (new.address_line_1 is distinct from old.address_line_1) and (new.address_line1 is distinct from old.address_line1) then
+      new.address_line1 := new.address_line_1;
+    end if;
+
+    -- address_line2 / address_line_2 synchronization
+    if (new.address_line_2 is distinct from old.address_line_2) and (new.address_line2 is not distinct from old.address_line2) then
+      new.address_line2 := new.address_line_2;
+    elsif (new.address_line2 is distinct from old.address_line2) and (new.address_line_2 is not distinct from old.address_line_2) then
+      new.address_line_2 := new.address_line2;
+    elsif (new.address_line_2 is distinct from old.address_line_2) and (new.address_line2 is distinct from old.address_line2) then
+      new.address_line2 := new.address_line_2;
+    end if;
+
+    -- pincode / postal_code synchronization
+    if (new.postal_code is distinct from old.postal_code) and (new.pincode is not distinct from old.pincode) then
+      new.pincode := new.postal_code;
+    elsif (new.pincode is distinct from old.pincode) and (new.postal_code is not distinct from old.postal_code) then
+      new.postal_code := new.pincode;
+    elsif (new.postal_code is distinct from old.postal_code) and (new.pincode is distinct from old.pincode) then
+      new.pincode := new.postal_code;
+    end if;
+  end if;
   return new;
 end;
 $$;
@@ -98,8 +152,21 @@ set relationship = coalesce(relationship, relationship_to_student);
 create or replace function public.sync_guardian_column_aliases()
 returns trigger language plpgsql as $$
 begin
-  new.relationship := coalesce(new.relationship, new.relationship_to_student);
-  new.relationship_to_student := coalesce(new.relationship_to_student, new.relationship);
+  if (tg_op = 'INSERT') then
+    if new.relationship_to_student is not null then
+      new.relationship := new.relationship_to_student;
+    elsif new.relationship is not null then
+      new.relationship_to_student := new.relationship;
+    end if;
+  elsif (tg_op = 'UPDATE') then
+    if (new.relationship_to_student is distinct from old.relationship_to_student) and (new.relationship is not distinct from old.relationship) then
+      new.relationship := new.relationship_to_student;
+    elsif (new.relationship is distinct from old.relationship) and (new.relationship_to_student is not distinct from old.relationship_to_student) then
+      new.relationship_to_student := new.relationship;
+    elsif (new.relationship_to_student is distinct from old.relationship_to_student) and (new.relationship is distinct from old.relationship) then
+      new.relationship := new.relationship_to_student;
+    end if;
+  end if;
   return new;
 end;
 $$;

@@ -41,6 +41,7 @@ export default function FeesPage() {
   const [referenceNumber, setReferenceNumber] = useState('');
   const [paymentRemarks, setPaymentRemarks] = useState('');
   const [allocations, setAllocations] = useState<{ [assessmentLineId: string]: string }>({});
+  const [paymentIdempotencyKey, setPaymentIdempotencyKey] = useState<string>('');
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
   const [lastPaymentResult, setLastPaymentResult] = useState<{
     receiptNumber: string;
@@ -192,10 +193,27 @@ export default function FeesPage() {
     setErrorMessage(null);
     setSuccessMessage(null);
 
+    const idempotencyKeyToUse =
+      paymentIdempotencyKey ||
+      (typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+            const r = (Math.random() * 16) | 0;
+            const v = c === 'x' ? r : (r & 0x3) | 0x8;
+            return v.toString(16);
+          }));
+
+    if (!paymentIdempotencyKey) {
+      setPaymentIdempotencyKey(idempotencyKeyToUse);
+    }
+
     try {
       const res = await fetch('/api/v1/fees/payments', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'idempotency-key': idempotencyKeyToUse,
+        },
         body: JSON.stringify({
           studentAcademicRecordId: studentDues.studentAcademicRecordId,
           category: paymentCategory,
@@ -217,6 +235,9 @@ export default function FeesPage() {
           amountInr: result.amountInr,
           timestamp: new Date().toLocaleTimeString(),
         });
+        // Reset idempotency key for next transaction
+        setPaymentIdempotencyKey('');
+        setAllocations({});
         // Refresh dues
         await handleSearchDues();
       } else {

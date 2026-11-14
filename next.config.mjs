@@ -4,6 +4,23 @@ const nextConfig = {
   poweredByHeader: false,
   output: 'standalone',
   async headers() {
+    const isProd = process.env.NODE_ENV === 'production';
+    const cspDirectives = [
+      "default-src 'self'",
+      isProd
+        ? "script-src 'self' 'unsafe-inline'"
+        : "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob:",
+      "font-src 'self'",
+      isProd
+        ? "connect-src 'self' https://*.supabase.co"
+        : "connect-src 'self' http://127.0.0.1:* http://localhost:* https://*.supabase.co",
+      "frame-ancestors 'none'",
+      "form-action 'self'",
+      "base-uri 'self'",
+    ];
+
     return [
       {
         source: '/:path*',
@@ -30,17 +47,7 @@ const nextConfig = {
           },
           {
             key: 'Content-Security-Policy',
-            value: [
-              "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
-              "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: blob:",
-              "font-src 'self'",
-              "connect-src 'self' http://127.0.0.1:* http://localhost:* https://*.supabase.co",
-              "frame-ancestors 'none'",
-              "form-action 'self'",
-              "base-uri 'self'",
-            ].join('; '),
+            value: cspDirectives.join('; '),
           },
         ],
       },

@@ -25,7 +25,8 @@ describe('PostgreSQL Demo Staff Login Reproduction', () => {
       process.env.DATABASE_URL = 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
       process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://127.0.0.1:54321';
       process.env.ALLOW_REMOTE_DATABASE = 'false';
-      process.env.ACTOR_SIGNING_SECRET = '3de4c2eb6696cd73c84b7ef5ded86ab8fbd0325f073d9d895d03947a2096aed4';
+      process.env.ACTOR_SIGNING_SECRET = 'actor-signing-secret-for-demo-staff-tests-32';
+      process.env.SESSION_SECRET = 'session-signing-secret-for-demo-staff-tests-32';
       clearAllLockouts();
       identityService.resetForTesting();
       setPersistenceMode('postgres');

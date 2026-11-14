@@ -65,6 +65,25 @@ describe('Session Secret Security & Validation', () => {
     expect(() => getServerEnv()).toThrow(/SESSION_SECRET and ACTOR_SIGNING_SECRET must be dedicated, distinct secrets/);
   });
 
+  it('getServerEnv fails validation in production when known insecure example secrets are used', () => {
+    process.env.SESSION_SECRET = 'dev-session-secret-must-be-at-least-32-chars-long!';
+    process.env.ACTOR_SIGNING_SECRET = 'actor-signing-secret-distinct-value-at-least-32-chars!';
+    (process.env as any).NODE_ENV = 'production';
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://127.0.0.1:54321';
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = 'sb_pub_test';
+    expect(() => getServerEnv()).toThrow(/Insecure or example SESSION_SECRET detected in production/);
+
+    process.env.SESSION_SECRET = 'session-secret-distinct-value-at-least-32-chars-long!';
+    process.env.ACTOR_SIGNING_SECRET = '3de4c2eb6696cd73c84b7ef5ded86ab8fbd0325f073d9d895d03947a2096aed4';
+    expect(() => getServerEnv()).toThrow(/Insecure or example ACTOR_SIGNING_SECRET detected in production/);
+  });
+
+  it('getSessionSecret fails validation in production when known insecure example secrets are used', () => {
+    process.env.SESSION_SECRET = 'dev-session-secret-must-be-at-least-32-chars-long!';
+    (process.env as any).NODE_ENV = 'production';
+    expect(() => getSessionSecret()).toThrow(/Insecure or example SESSION_SECRET detected in production/);
+  });
+
   it('getServerEnv succeeds in production when both secrets are valid and distinct', () => {
     process.env.SESSION_SECRET = 'session-secret-distinct-value-at-least-32-chars-long!';
     process.env.ACTOR_SIGNING_SECRET = 'actor-signing-secret-distinct-value-at-least-32-chars!';

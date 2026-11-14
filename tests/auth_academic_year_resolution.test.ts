@@ -44,4 +44,18 @@ describe('Auth Dynamic Academic Year Resolution', () => {
       expect(verified.session.activeAcademicYearLabel).toBe('2027-2028');
     }
   });
+
+  it('fails closed when no academic year is marked current', async () => {
+    const ayRepo = getRepositories().academicYears;
+    const originalListAcademicYears = ayRepo.listAcademicYears.bind(ayRepo);
+    ayRepo.listAcademicYears = async () => [];
+
+    try {
+      await expect(
+        identityService.login('principal@school-demo.example', 'School@2026!')
+      ).rejects.toThrow(/No active academic year found with status "current"/);
+    } finally {
+      ayRepo.listAcademicYears = originalListAcademicYears;
+    }
+  });
 });
