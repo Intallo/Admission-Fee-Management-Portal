@@ -797,9 +797,9 @@ describe('Milestone M8.3.4: Transaction Boundary and Repository Correctness', ()
             // Write a dummy record
             await client.query(
               `INSERT INTO public.admission_status_history (
-                 id, admission_application_id, from_status, to_status, changed_by, reason, created_at
-               ) VALUES ($1, $2, 'draft', 'on_hold', $3, 'Temporary Rollback Test', now())`,
-              [randomUUID(), draft.id, activePrincipalSession.staffId]
+                 admission_application_id, from_status, to_status, changed_by, reason, created_at
+               ) VALUES ($1, 'draft', 'on_hold', $2, 'Temporary Rollback Test', now())`,
+              [draft.id, activePrincipalSession.staffId]
             );
 
             // Trigger forced SQL failure

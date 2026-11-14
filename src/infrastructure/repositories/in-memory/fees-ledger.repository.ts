@@ -433,6 +433,8 @@ export class InMemoryFeesLedgerRepository implements IFeesLedgerRepository {
       academicYear: '2026-2027',
       paymentMethod: params.method,
       payerName: params.payerName.trim(),
+      referenceNumber: params.referenceNumber || null,
+      remarks: params.remarks || null,
       paymentDate: nowIso.slice(0, 10),
       totalAmountInr: totalAmount,
       totalAmountInWords: amountInWordsInr(totalAmount),

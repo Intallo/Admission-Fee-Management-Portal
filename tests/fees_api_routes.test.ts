@@ -356,6 +356,52 @@ describe('Fees, Payments and Receipts API Route Handlers (HTTP Integration)', ()
       expect(json.detail).toContain('Idempotency key mismatch');
     });
 
+    it('POST /api/v1/fees/payments returns 409 Conflict when only remarks differ for the same Idempotency-Key', async () => {
+      currentMockSession.role = 'accountant';
+
+      const initialPayload = {
+        studentAcademicRecordId: testStudentAcademicRecordId,
+        category: 'school_fee',
+        amount: '1000.00',
+        method: 'cash',
+        payerName: 'Initial Payer',
+        remarks: 'Original Note',
+        allocations: [{ assessmentLineId: tuitionLineId, amount: '1000.00' }],
+      };
+
+      const initialReq = new Request('http://localhost/api/v1/fees/payments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'idempotency-key': 'idemp-remarks-test-01',
+        },
+        body: JSON.stringify(initialPayload),
+      });
+
+      const firstRes = await recordPaymentRoute(initialReq);
+      expect(firstRes.status).toBe(201);
+
+      // Same key, same amount, but different remarks
+      const conflictingRemarksPayload = {
+        ...initialPayload,
+        remarks: 'Tampered Note',
+      };
+
+      const req = new Request('http://localhost/api/v1/fees/payments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'idempotency-key': 'idemp-remarks-test-01',
+        },
+        body: JSON.stringify(conflictingRemarksPayload),
+      });
+
+      const res = await recordPaymentRoute(req);
+      expect(res.status).toBe(409);
+      const json = await res.json();
+      expect(json.detail).toContain('Idempotency key mismatch');
+    });
+
     it('POST /api/v1/fees/payments returns 400 when Idempotency-Key header is missing', async () => {
       currentMockSession.role = 'accountant';
       const req = new Request('http://localhost/api/v1/fees/payments', {

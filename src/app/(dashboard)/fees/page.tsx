@@ -42,6 +42,7 @@ export default function FeesPage() {
   const [paymentRemarks, setPaymentRemarks] = useState('');
   const [allocations, setAllocations] = useState<{ [assessmentLineId: string]: string }>({});
   const [paymentIdempotencyKey, setPaymentIdempotencyKey] = useState<string>('');
+  const [hasUnresolvedPaymentAttempt, setHasUnresolvedPaymentAttempt] = useState(false);
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
   const [lastPaymentResult, setLastPaymentResult] = useState<{
     receiptNumber: string;
@@ -134,13 +135,28 @@ export default function FeesPage() {
         const data = await res.json();
         setStudentDues(data);
         setPayerName(data.studentName || '');
-        setPaymentIdempotencyKey('');
-        // Initialize default empty allocations
-        const initialAllocs: { [id: string]: string } = {};
-        for (const line of data.lines || []) {
-          initialAllocs[line.id] = '';
+
+        const isSameStudent = studentDues && studentDues.studentAcademicRecordId === data.studentAcademicRecordId;
+        if (!isSameStudent) {
+          // Switched to a different student: reset idempotency key and allocations
+          setPaymentIdempotencyKey('');
+          setHasUnresolvedPaymentAttempt(false);
+          const initialAllocs: { [id: string]: string } = {};
+          for (const line of data.lines || []) {
+            initialAllocs[line.id] = '';
+          }
+          setAllocations(initialAllocs);
+        } else if (!hasUnresolvedPaymentAttempt) {
+          // Same student refreshed without an unresolved pending attempt: reset
+          setPaymentIdempotencyKey('');
+          const initialAllocs: { [id: string]: string } = {};
+          for (const line of data.lines || []) {
+            initialAllocs[line.id] = '';
+          }
+          setAllocations(initialAllocs);
         }
-        setAllocations(initialAllocs);
+        // If hasUnresolvedPaymentAttempt && isSameStudent:
+        // PRESERVE paymentIdempotencyKey and current allocations so retry or verification avoids duplicate charges!
       } else {
         const err = await res.json();
         setErrorMessage(err.message || 'Student fee dues record not found.');
@@ -236,8 +252,9 @@ export default function FeesPage() {
           amountInr: result.amountInr,
           timestamp: new Date().toLocaleTimeString(),
         });
-        // Reset idempotency key for next transaction
+        // Reset idempotency key and unresolved state for next transaction
         setPaymentIdempotencyKey('');
+        setHasUnresolvedPaymentAttempt(false);
         setAllocations({});
         // Refresh dues
         await handleSearchDues();
@@ -245,11 +262,15 @@ export default function FeesPage() {
         const err = await res.json();
         if (res.status === 409) {
           setPaymentIdempotencyKey('');
+          setHasUnresolvedPaymentAttempt(false);
         }
         setErrorMessage(err.detail || err.message || 'Payment recording failed.');
       }
     } catch {
-      setErrorMessage('Network or server error while recording payment.');
+      setHasUnresolvedPaymentAttempt(true);
+      setErrorMessage(
+        'Network or server error while recording payment. The transaction outcome is uncertain. Your transaction key has been retained — refreshing dues or retrying will preserve this key to prevent duplicate billing.'
+      );
     } finally {
       setIsSubmittingPayment(false);
     }
@@ -643,7 +664,26 @@ export default function FeesPage() {
                       <Badge variant="warning">Single Category (BR-17)</Badge>
                     </div>
                   </CardHeader>
-                  <CardContent className="pt-4">
+                  <CardContent className="pt-4 space-y-4">
+                    {hasUnresolvedPaymentAttempt && paymentIdempotencyKey && (
+                      <Alert variant="warning" title="Unresolved Payment Attempt">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <span className="text-xs">
+                            A previous payment attempt timed out or failed to receive confirmation. Your idempotency key is preserved to ensure retrying returns the original receipt or safely posts without double billing.
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPaymentIdempotencyKey('');
+                              setHasUnresolvedPaymentAttempt(false);
+                            }}
+                            className="px-2 py-1 text-xs font-medium bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 rounded whitespace-nowrap self-start sm:self-auto"
+                          >
+                            Discard &amp; Start Fresh
+                          </button>
+                        </div>
+                      </Alert>
+                    )}
                     <form onSubmit={handleRecordPayment} className="space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <Select

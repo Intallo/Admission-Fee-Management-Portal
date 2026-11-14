@@ -43,6 +43,7 @@ export function computePaymentRequestHash(params: RecordPaymentRequestDTO): stri
     method: params.method,
     payerName: params.payerName?.trim() || '',
     referenceNumber: params.referenceNumber?.trim() || null,
+    remarks: (params.remarks || (params as any).notes)?.trim() || null,
     allocations: normalizedAllocations,
   };
 
@@ -208,6 +209,7 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
   ): Promise<RecordPaymentResultDTO | null> {
     const existRes = await client.query(
       `select p.id, r.id as receipt_id, r.receipt_number, p.category, p.amount, p.method, p.payer_name,
+              p.reference_number, p.notes,
               p.student_academic_record_id, p.idempotency_payload_hash, r.issued_at, r.rendered_snapshot
        from public.payments p
        join public.receipts r on r.payment_id = p.id
@@ -225,15 +227,66 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
           );
         }
       } else if (params) {
+        // Legacy payment without idempotency_payload_hash:
+        // Compare all recoverable payment details including payer, reference number, remarks/notes, and line allocations
+        const normalizedExistingPayer = (row.payer_name || '').trim();
+        const incomingPayer = (params.payerName || '').trim();
+        const normalizedExistingRef = (row.reference_number || '').trim();
+        const incomingRef = (params.referenceNumber || '').trim();
+        const normalizedExistingNotes = (row.notes || '').trim();
+        const incomingRemarks = (params.remarks || (params as any).notes || '').trim();
+
         if (
           row.student_academic_record_id !== params.studentAcademicRecordId ||
           formatInr(row.amount) !== formatInr(params.amount) ||
           row.category !== params.category ||
-          row.method !== params.method
+          row.method !== params.method ||
+          normalizedExistingPayer !== incomingPayer ||
+          normalizedExistingRef !== incomingRef ||
+          normalizedExistingNotes !== incomingRemarks
         ) {
           throw new ConflictError(
             'Idempotency key mismatch: This idempotency key was previously submitted with a different payment payload.'
           );
+        }
+
+        // Verify allocations against public.payment_allocations
+        const allocRes = await client.query(
+          `select student_fee_assessment_line_id, amount
+           from public.payment_allocations
+           where payment_id = $1`,
+          [row.id]
+        );
+
+        if (allocRes.rowCount !== params.allocations.length) {
+          throw new ConflictError(
+            'Idempotency key mismatch: This idempotency key was previously submitted with a different payment payload.'
+          );
+        }
+
+        const existingAllocs = [...allocRes.rows]
+          .map((a: any) => ({
+            lineId: a.student_fee_assessment_line_id,
+            amount: formatInr(a.amount),
+          }))
+          .sort((a, b) => a.lineId.localeCompare(b.lineId));
+
+        const incomingAllocs = [...params.allocations]
+          .map((a) => ({
+            lineId: a.assessmentLineId,
+            amount: formatInr(a.amount),
+          }))
+          .sort((a, b) => a.lineId.localeCompare(b.lineId));
+
+        for (let i = 0; i < existingAllocs.length; i++) {
+          if (
+            existingAllocs[i].lineId !== incomingAllocs[i].lineId ||
+            existingAllocs[i].amount !== incomingAllocs[i].amount
+          ) {
+            throw new ConflictError(
+              'Idempotency key mismatch: This idempotency key was previously submitted with a different payment payload.'
+            );
+          }
         }
       }
 
@@ -379,7 +432,7 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
               params.method,
               params.payerName,
               params.referenceNumber || null,
-              (params as any).notes || null,
+              params.remarks || (params as any).notes || null,
               todayDate,
               idempotencyKey,
               requestHash,
@@ -418,7 +471,7 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
             params.method,
             params.payerName,
             params.referenceNumber || null,
-            (params as any).notes || null,
+            params.remarks || (params as any).notes || null,
             todayDate,
             null,
             null,
@@ -451,6 +504,7 @@ export class PostgresFeesLedgerRepository implements IFeesLedgerRepository {
         payerName: params.payerName,
         paymentMethod: params.method,
         referenceNumber: params.referenceNumber || null,
+        remarks: params.remarks || (params as any).notes || null,
         allocations: params.allocations,
         generatedAt: nowIso,
         cashierStaffId: session.staffId,
