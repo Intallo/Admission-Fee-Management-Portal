@@ -120,6 +120,12 @@ export function getServerEnv(): ServerEnv {
     if (!parsed.data.SESSION_SECRET) {
       throw new Error('[ENV CONFIG ERROR] Missing required production environment variable: SESSION_SECRET (min 32 chars)');
     }
+    if (!parsed.data.ACTOR_SIGNING_SECRET) {
+      throw new Error('[ENV CONFIG ERROR] Missing required production environment variable: ACTOR_SIGNING_SECRET (min 32 chars)');
+    }
+    if (parsed.data.SESSION_SECRET === parsed.data.ACTOR_SIGNING_SECRET) {
+      throw new Error('[SECURITY ERROR] SESSION_SECRET and ACTOR_SIGNING_SECRET must be dedicated, distinct secrets.');
+    }
   }
 
   const allowRemote = parsed.data.ALLOW_REMOTE_DATABASE === 'true';

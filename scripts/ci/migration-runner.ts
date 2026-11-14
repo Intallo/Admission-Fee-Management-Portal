@@ -166,3 +166,45 @@ export async function verifyDatabaseState(client: PoolClient | Pool): Promise<Da
     rlsProtectedTableCount: rlsRes.rows[0]?.cnt || 0,
   };
 }
+
+if (
+  typeof require !== 'undefined' &&
+  (require.main === module || (typeof process !== 'undefined' && process.argv[1]?.includes('migration-runner')))
+) {
+  const dbUrl = process.env.DATABASE_URL || 'postgresql://postgres:postgrespassword@localhost:5432/school_test_db';
+  console.log(`==> Validating Supabase migrations against ${dbUrl}...`);
+  const pool = new Pool({ connectionString: dbUrl });
+
+  runMigrationSequence(pool, { includeBootstrap: true })
+    .then(async (result) => {
+      if (result.error) {
+        console.error(`[MIGRATION ERROR] Failed on ${result.failedMigration}:`, result.error);
+        await pool.end();
+        process.exit(1);
+      }
+      console.log(`==> Successfully applied ${result.migrationsApplied.length} migrations in ${result.durationMs}ms`);
+
+      const report = await verifyDatabaseState(pool);
+      console.log('==> Database Verification Report:');
+      console.log(`    Public Tables:  ${report.publicTableCount}`);
+      console.log(`    Private Tables: ${report.privateTableCount}`);
+      console.log(`    Auth Tables:    ${report.authTableCount}`);
+      console.log(`    Storage Tables: ${report.storageTableCount}`);
+      console.log(`    RLS Protected:  ${report.rlsProtectedTableCount}`);
+
+      if (report.missingRoles.length > 0) {
+        console.error(`[ERROR] Missing required roles: ${report.missingRoles.join(', ')}`);
+        await pool.end();
+        process.exit(1);
+      }
+
+      await pool.end();
+      console.log('==> Migration validation completed successfully.');
+      process.exit(0);
+    })
+    .catch(async (err) => {
+      console.error('[FATAL ERROR]', err);
+      await pool.end();
+      process.exit(1);
+    });
+}

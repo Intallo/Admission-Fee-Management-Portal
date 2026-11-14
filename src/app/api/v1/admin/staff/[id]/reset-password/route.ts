@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireRole } from '@/auth/guards';
 import { identityService } from '@/modules/identity-access/service';
-import { formatErrorResponse } from '@/lib/errors';
+import { formatErrorResponse, NotFoundError } from '@/lib/errors';
 import { getOrCreateCorrelationId } from '@/lib/correlation';
 import { getRepositories } from '@/infrastructure/repositories';
 
@@ -16,22 +16,12 @@ export async function POST(
   try {
     const session = await requireRole(['system_admin']);
 
-    let targetEmail = '';
-    try {
-      const staff = await getRepositories().identity.getStaffById(params.id);
-      if (staff) {
-        targetEmail = staff.email;
-      }
-    } catch {
-      // Test fallback
+    const staff = await getRepositories().identity.getStaffById(params.id);
+    if (!staff) {
+      throw new NotFoundError(`Staff member with ID "${params.id}" not found.`);
     }
 
-    if (!targetEmail) {
-      const body = await request.json().catch(() => ({}));
-      targetEmail = body.email || `staff_${params.id}@school-demo.example`;
-    }
-
-    const result = await identityService.adminResetPassword(targetEmail, session);
+    const result = await identityService.adminResetPassword(staff.email, session);
 
     return NextResponse.json(result, {
       status: 200,

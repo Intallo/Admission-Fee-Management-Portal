@@ -83,6 +83,9 @@ jobs:
       - name: Validate TypeScript Types
         run: npm run typecheck
 
+      - name: Validate Supabase Database State & Migrations
+        run: npm run db:migrate:validate
+
       - name: Execute Vitest Suite & PostgreSQL Integration Tests
         run: npx vitest run
 

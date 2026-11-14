@@ -38,21 +38,38 @@ export async function initializeDemoCredentials(repo?: IIdentityRepository): Pro
     { email: 'accounts@school-demo.example', role: 'accountant' as StaffRole, fullName: 'Demo Accountant', mustChange: false },
   ];
 
+  // Resolve or initialize system admin staff member first to establish a legitimate system_admin actor session
+  const adminAccount = demoAccounts[0];
+  let existingAdmin = await repository.getStaffByEmail(adminAccount.email);
+  const adminId = existingAdmin ? existingAdmin.id : randomUUID();
+
   const bootstrapSession: AuthenticatedUserSession = {
-    staffId: '00000000-0000-0000-0000-000000000000',
-    authUserId: '00000000-0000-0000-0000-000000000000',
-    email: 'system.admin@school-demo.example',
-    fullName: 'Demo System Administrator',
+    staffId: adminId,
+    authUserId: adminId,
+    email: adminAccount.email,
+    fullName: adminAccount.fullName,
     role: 'system_admin',
     isActive: true,
     activeAcademicYearId: '00000000-0000-0000-0000-000000000001',
     activeAcademicYearLabel: '2026-2027',
   };
 
+  if (!existingAdmin) {
+    existingAdmin = await repository.createStaff({
+      id: adminId,
+      email: adminAccount.email.toLowerCase(),
+      role: adminAccount.role,
+      fullName: adminAccount.fullName,
+      passwordHash: defaultHash,
+      mustChangePassword: adminAccount.mustChange,
+      isActive: true,
+    }, bootstrapSession);
+  }
+
   for (const acc of demoAccounts) {
-    const existing = await repository.getStaffByEmail(acc.email);
-    if (!existing) {
-      await repository.createStaff({
+    let staffRecord = (acc.email === adminAccount.email) ? existingAdmin : await repository.getStaffByEmail(acc.email);
+    if (!staffRecord) {
+      staffRecord = await repository.createStaff({
         id: randomUUID(),
         email: acc.email.toLowerCase(),
         role: acc.role,
@@ -63,7 +80,7 @@ export async function initializeDemoCredentials(repo?: IIdentityRepository): Pro
       }, bootstrapSession);
     } else {
       // Check if existing demo staff has missing or invalid demo password hash
-      const secProfile = await repository.getSecurityProfile(existing.id, acc.email);
+      const secProfile = await repository.getSecurityProfile(staffRecord.id, acc.email);
       const isPasswordValid = secProfile?.passwordHash
         ? await verifyPassword(DEFAULT_DEMO_PASSWORD, secProfile.passwordHash)
         : false;
@@ -72,7 +89,7 @@ export async function initializeDemoCredentials(repo?: IIdentityRepository): Pro
       if (!secProfile || (!isPasswordValid && !secProfile.lastLoginAt)) {
         if (repository.ensureSecurityProfile) {
           await repository.ensureSecurityProfile(
-            existing.id,
+            staffRecord.id,
             defaultHash,
             acc.mustChange,
             bootstrapSession
@@ -99,6 +116,24 @@ export class IdentityService {
   resetForTesting(): void {
     demoAccountsInitialized = false;
     this.repo.resetForTesting?.();
+  }
+
+  private async resolveActiveAcademicYear(): Promise<{ id: string; label: string }> {
+    let activeYearId = '00000000-0000-0000-0000-000000000001';
+    let activeYearLabel = '2026-2027';
+    try {
+      const years = await getRepositories().academicYears.listAcademicYears();
+      const currentYear = years.find((y) => y.status === 'current') || years[0];
+      if (currentYear) {
+        activeYearId = currentYear.id;
+        activeYearLabel = currentYear.label;
+      }
+    } catch (ayError) {
+      logger.warn('Failed to resolve active academic year, falling back to default', {
+        error: String(ayError),
+      });
+    }
+    return { id: activeYearId, label: activeYearLabel };
   }
 
   async isSessionRevoked(sessionId: string): Promise<boolean> {
@@ -178,8 +213,8 @@ export class IdentityService {
 
     if (!passwordValid) {
       const result = recordFailedAttempt(normalizedEmail);
-      const attempts = (secRecord.failedLoginAttempts || 0) + 1;
-      const isNowLocked = attempts >= 5 || result.isNowLocked;
+      const attempts = Math.max((secRecord.failedLoginAttempts || 0) + 1, result.failedAttempts);
+      const isNowLocked = result.isNowLocked || attempts >= 5;
       const lockUntil = isNowLocked ? Date.now() + 15 * 60 * 1000 : null;
 
       await this.repo.recordLoginAttempt(staffRecord.id, false, lockUntil);
@@ -199,24 +234,19 @@ export class IdentityService {
       throw new AuthenticationError('Invalid email or password.');
     }
 
+    // Concurrency guard: re-verify lockout in case a concurrent attempt locked the account
+    const postVerifyLockout = checkLockout(normalizedEmail);
+    if (postVerifyLockout.isLocked) {
+      throw new AuthenticationError(
+        `Account is temporarily locked due to 5 consecutive failed login attempts. Please try again after ${postVerifyLockout.remainingMinutes} minute(s).`
+      );
+    }
+
     // Successful login: reset failed attempts using authenticated self-session
     recordSuccessfulLogin(normalizedEmail);
 
     // Resolve active academic year dynamically from authoritative repository
-    let activeYearId = '00000000-0000-0000-0000-000000000001';
-    let activeYearLabel = '2026-2027';
-    try {
-      const years = await getRepositories().academicYears.listAcademicYears();
-      const currentYear = years.find((y) => y.status === 'current') || years[0];
-      if (currentYear) {
-        activeYearId = currentYear.id;
-        activeYearLabel = currentYear.label;
-      }
-    } catch (ayError) {
-      logger.warn('Failed to resolve active academic year during login, falling back to default', {
-        error: String(ayError),
-      });
-    }
+    const { id: activeYearId, label: activeYearLabel } = await this.resolveActiveAcademicYear();
 
     const selfSession: AuthenticatedUserSession = {
       staffId: staffRecord.id,
@@ -304,6 +334,7 @@ export class IdentityService {
     }
 
     // Authenticated self-session for authorized password change
+    const { id: activeYearId, label: activeYearLabel } = await this.resolveActiveAcademicYear();
     const selfSession: AuthenticatedUserSession = {
       staffId: staff.id,
       authUserId: staff.authUserId || staff.id,
@@ -311,8 +342,8 @@ export class IdentityService {
       fullName: staff.fullName,
       role: staff.role,
       isActive: staff.isActive,
-      activeAcademicYearId: '00000000-0000-0000-0000-000000000001',
-      activeAcademicYearLabel: '2026-2027',
+      activeAcademicYearId: activeYearId,
+      activeAcademicYearLabel: activeYearLabel,
     };
 
     // Hash and persist new password

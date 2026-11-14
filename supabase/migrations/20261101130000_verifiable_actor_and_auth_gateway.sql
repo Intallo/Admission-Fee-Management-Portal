@@ -12,8 +12,20 @@
 
 -- 1. Ensure pgcrypto extension is available for HMAC-SHA256 actor verification (standardized in schema extensions)
 create schema if not exists extensions;
-create extension if not exists pgcrypto with schema extensions;
 grant usage on schema extensions to public, anon, authenticated, school_app_user, school_app_login;
+
+do $$
+begin
+  if not exists (select 1 from pg_extension where extname = 'pgcrypto') then
+    create extension pgcrypto with schema extensions;
+  elsif exists (select 1 from pg_extension e join pg_namespace n on e.extnamespace = n.oid where e.extname = 'pgcrypto' and n.nspname <> 'extensions') then
+    begin
+      alter extension pgcrypto set schema extensions;
+    exception when others then
+      null;
+    end;
+  end if;
+end $$;
 
 -- 2. System secrets vault in schema private (inaccessible to school_app_user/school_app_login)
 create table if not exists private.system_secrets (

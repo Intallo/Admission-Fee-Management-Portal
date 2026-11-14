@@ -64,6 +64,7 @@ export async function POST(request: Request) {
     ? {
         success: false,
         error: 'Failed to record server-side session revocation during logout. Token revocation could not be persisted.',
+        correlationId,
       }
     : { success: true, message: 'Logged out successfully.' };
 
