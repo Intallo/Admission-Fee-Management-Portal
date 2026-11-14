@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { identityService, initializeDemoCredentials } from '../src/modules/identity-access/service';
 import { clearAllLockouts } from '../src/lib/auth/lockout';
 import { AuthenticationError, ValidationError } from '../src/lib/errors';
@@ -102,5 +102,47 @@ describe('Staff Authentication & Credentials Lifecycle (US-01, US-04)', () => {
     // User can now log in with temporary password
     const loginRes = await identityService.login(targetEmail, temporaryPassword);
     expect(loginRes.mustChangePassword).toBe(true);
+  });
+
+  describe('Production Environment Guard & Demo Credential Isolation', () => {
+    const originalEnv = process.env.NODE_ENV;
+
+    afterEach(() => {
+      (process.env as any).NODE_ENV = originalEnv;
+    });
+
+    it('refuses to initialize demo credentials in production environment and throws security violation', async () => {
+      (process.env as any).NODE_ENV = 'production';
+
+      await expect(initializeDemoCredentials()).rejects.toThrow(
+        /\[SECURITY VIOLATION\] Demo account credential initialization is strictly forbidden in production/
+      );
+    });
+
+    it('refuses to initialize demo credentials when DATABASE_URL targets protected remote database', async () => {
+      const origDbUrl = process.env.DATABASE_URL;
+      try {
+        process.env.DATABASE_URL = `postgresql://postgres:pass@db.fjrfyzamiirqzitdchkz.supabase.co:5432/postgres`;
+        await expect(initializeDemoCredentials()).rejects.toThrow(
+          /\[SECURITY VIOLATION\] Demo account credential initialization cannot target retained remote database/
+        );
+      } finally {
+        process.env.DATABASE_URL = origDbUrl;
+      }
+    });
+
+    it('does not auto-seed demo accounts during login against an unseeded database in production', async () => {
+      (process.env as any).NODE_ENV = 'production';
+      identityService.resetForTesting();
+
+      // Attempting to log in as demo account on unseeded repo must fail with invalid credentials and NOT seed accounts
+      await expect(
+        identityService.login('principal@school-demo.example', 'School@2026!')
+      ).rejects.toThrow('Invalid email or password.');
+
+      // Verify no demo accounts were seeded
+      const staff = await identityService['repo'].getStaffByEmail('principal@school-demo.example');
+      expect(staff).toBeNull();
+    });
   });
 });

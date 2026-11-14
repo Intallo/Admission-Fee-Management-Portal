@@ -8,12 +8,25 @@ import { logger } from '../../lib/logger';
 import { enforcePolicy } from '../../policy/guards';
 import { IIdentityRepository } from '../../infrastructure/repositories/interfaces';
 import { getRepositories } from '../../infrastructure/repositories/registry';
+import { PROTECTED_REMOTE_REF } from '../../lib/env';
 
 // Seed default credentials for standard demo accounts (Password: "School@2026!")
 const DEFAULT_DEMO_PASSWORD = 'School@2026!';
 let demoAccountsInitialized = false;
 
 export async function initializeDemoCredentials(repo?: IIdentityRepository): Promise<void> {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      '[SECURITY VIOLATION] Demo account credential initialization is strictly forbidden in production environments.'
+    );
+  }
+
+  if (process.env.DATABASE_URL && process.env.DATABASE_URL.includes(PROTECTED_REMOTE_REF)) {
+    throw new Error(
+      `[SECURITY VIOLATION] Demo account credential initialization cannot target retained remote database (${PROTECTED_REMOTE_REF}).`
+    );
+  }
+
   const repository = repo ?? getRepositories().identity;
   const defaultHash = await hashPassword(DEFAULT_DEMO_PASSWORD);
 
