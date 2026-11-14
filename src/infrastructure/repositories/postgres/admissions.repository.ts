@@ -250,9 +250,9 @@ export class PostgresAdmissionsRepository implements IAdmissionsRepository {
       // 11. Record audit log
       await client.query(
         `insert into public.audit_logs (
-           id, actor_staff_id, action, entity_type, entity_id, outcome, reason, created_at
-         ) values ($1, $2, 'ADMISSION_DRAFT_CREATED', 'admission_applications', $3, 'SUCCESS', $4, $5)`,
-        [randomUUID(), session.staffId, applicationId, `Created draft application ${applicationNumber}`, nowIso]
+           actor_staff_id, action, entity_type, entity_id, outcome, reason, created_at
+         ) values ($1, 'ADMISSION_DRAFT_CREATED', 'admission_applications', $2, 'SUCCESS', $3, $4)`,
+        [session.staffId, applicationId, `Created draft application ${applicationNumber}`, nowIso]
       );
 
       return this.getApplicationById(applicationId, session, client);
